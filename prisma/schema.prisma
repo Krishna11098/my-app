@@ -315,11 +315,17 @@ model Quotation {
   @@index([customerId, status, quotationNumber])
 }
 
+enum LineType {
+  RENTAL
+  SALE
+}
+
 model QuotationLine {
-  id          String  @id @default(cuid())
+  id          String   @id @default(cuid())
   quotationId String
   productId   String
   variantId   String?
+  type        LineType @default(RENTAL)
   quantity    Int
   unitPrice   Decimal
   lineTotal   Decimal
@@ -366,10 +372,11 @@ model RentalOrder {
 }
 
 model OrderLine {
-  id        String  @id @default(cuid())
+  id        String   @id @default(cuid())
   orderId   String
   productId String
   variantId String?
+  type      LineType @default(RENTAL)
   quantity  Int
   unitPrice Decimal
   lineTotal Decimal
@@ -392,7 +399,7 @@ model Reservation {
   product Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
   order   RentalOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
-  @@unique([productId, fromDate, toDate])
+  @@unique([productId, orderId, fromDate, toDate])
   @@index([productId, orderId])
 }
 
@@ -521,13 +528,16 @@ model Payment {
 }
 
 model Notification {
-  id       String           @id @default(cuid())
-  userId   String
-  title    String
-  message  String
-  type     NotificationType
-  isRead   Boolean          @default(false)
-  metadata Json? // e.g., {orderId: "...", dueDate: "..."}
+  id            String           @id @default(cuid())
+  userId        String
+  title         String
+  message       String
+  type          NotificationType
+  isRead        Boolean          @default(false)
+  isUrgent      Boolean          @default(false)
+  referenceId   String?
+  referenceType String?
+  metadata      Json?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 

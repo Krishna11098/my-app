@@ -111,9 +111,20 @@ function OrdersContent() {
                                             </Link>
                                         )}
                                         {order.isOrder && (
-                                            <button className="px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm font-medium transition-colors text-gray-300">
-                                                Invoice
-                                            </button>
+                                            <>
+                                                <Link 
+                                                    href={`/orders/${order.id}`} 
+                                                    className="px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 rounded-lg text-sm font-bold hover:shadow-lg hover:shadow-purple-500/20 transition-all text-center"
+                                                >
+                                                    View Details
+                                                </Link>
+                                                <button 
+                                                    onClick={() => window.open(`/api/orders/${order.id}/invoice`, '_blank')}
+                                                    className="px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm font-medium transition-colors text-gray-300"
+                                                >
+                                                    Invoice
+                                                </button>
+                                            </>
                                         )}
                                     </div>
                                 </div>

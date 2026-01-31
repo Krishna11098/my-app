@@ -1,21 +1,26 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { sendOrderConfirmationEmail } from '@/lib/email';
 
 export async function POST(req) {
     try {
-        const { quotationId } = await req.json();
+        const { quotationId, paymentId, razorpayOrderId, addressId } = await req.json();
 
         // 1. Fetch Quotation
         const quotation = await prisma.quotation.findUnique({
             where: { id: quotationId },
-            include: { lines: true }
+            include: { lines: { include: { product: true } }, order: true, customer: true }
         });
 
         if (!quotation) {
             return NextResponse.json({ error: 'Quotation not found' }, { status: 404 });
         }
 
-        if (quotation.status === 'CONFIRMED' || quotation.order) { // Check if already ordered? Relations might not be loaded, check status
+        if (quotation.status === 'CONFIRMED' || quotation.order) {
+            // Already confirmed - return success with existing order
+            if (quotation.order) {
+                return NextResponse.json({ success: true, orderId: quotation.order.id, message: 'Order was already confirmed' });
+            }
             return NextResponse.json({ error: 'Order already confirmed' }, { status: 400 });
         }
 
@@ -55,7 +60,28 @@ export async function POST(req) {
         // 3. Create Rental Order, Invoice, and Reservations in Transaction
         const result = await prisma.$transaction(async (tx) => {
 
-            // Create Order
+            // Use provided addressId or find/create default address
+            let userAddrId = addressId;
+            
+            if (!userAddrId) {
+                let userAddr = await tx.address.findFirst({ where: { userId: quotation.customerId } });
+
+                if (!userAddr) {
+                    userAddr = await tx.address.create({
+                        data: {
+                            userId: quotation.customerId,
+                            street: 'Default Pickup Address',
+                            city: 'City',
+                            state: 'State',
+                            postalCode: '000000',
+                            isDefault: true
+                        }
+                    });
+                }
+                userAddrId = userAddr.id;
+            }
+
+            // Create Order with valid address
             const count = await tx.rentalOrder.count();
             const orderNumber = `ORD-${new Date().getFullYear()}-${(count + 1).toString().padStart(4, '0')}`;
 
@@ -68,40 +94,14 @@ export async function POST(req) {
                     subtotal: quotation.subtotal,
                     taxAmount: quotation.taxAmount,
                     totalAmount: quotation.totalAmount,
-                    securityDeposit: 0, // Mock for now
-                    amountPaid: quotation.totalAmount, // Assuming full payment simulation
+                    securityDeposit: 0,
+                    amountPaid: quotation.totalAmount,
                     rentalStart: quotation.rentalStart,
                     rentalEnd: quotation.rentalEnd,
-                    pickupAddressId: 'default-address-id-placeholder', // We need a real address. 
-                    // Quick fix: Find user's address or create one.
-                    // Or since we don't have address selection in UI yet, we mock or skip validation if schema allows.
-                    // Schema: `pickupAddressId String`. It's required.
-                    // Let's find first address of user or create dummy.
+                    pickupAddressId: userAddrId,
+                    returnAddressId: userAddrId
                 }
             });
-
-            // Need to fix Address relation issue if strictly required. 
-            // In schema: `pickupAddress Address ...`.
-            // Let's create a dummy address if user has none.
-            const userAddr = await tx.address.findFirst({ where: { userId: quotation.customerId } });
-            let addrId = userAddr?.id;
-
-            if (!addrId) {
-                const newAddr = await tx.address.create({
-                    data: {
-                        userId: quotation.customerId,
-                        street: 'Default Pickup',
-                        city: 'City',
-                        state: 'State',
-                        postalCode: '000000'
-                    }
-                });
-                addrId = newAddr.id;
-                // Update order with address
-                await tx.rentalOrder.update({ where: { id: order.id }, data: { pickupAddressId: addrId } });
-            } else {
-                await tx.rentalOrder.update({ where: { id: order.id }, data: { pickupAddressId: addrId } });
-            }
 
             // Create Order Lines
             await tx.orderLine.createMany({
@@ -109,21 +109,44 @@ export async function POST(req) {
                     orderId: order.id,
                     productId: l.productId,
                     quantity: l.quantity,
+                    type: l.type || 'RENTAL', // Include type from quotation line
                     unitPrice: l.unitPrice,
                     lineTotal: l.lineTotal
                 }))
             });
 
-            // Create Reservations
-            await tx.reservation.createMany({
-                data: quotation.lines.map(l => ({
-                    productId: l.productId,
-                    orderId: order.id,
-                    quantity: l.quantity,
-                    fromDate: quotation.rentalStart,
-                    toDate: quotation.rentalEnd
-                }))
-            });
+            // Create Reservations (only for RENTAL items, not SALE/purchase items)
+            const rentalLines = quotation.lines.filter(l => l.type !== 'SALE');
+            if (rentalLines.length > 0) {
+                // Group by productId to avoid duplicate reservations for same product
+                const productReservations = {};
+                for (const l of rentalLines) {
+                    if (productReservations[l.productId]) {
+                        productReservations[l.productId].quantity += l.quantity;
+                    } else {
+                        productReservations[l.productId] = {
+                            productId: l.productId,
+                            orderId: order.id,
+                            quantity: l.quantity,
+                            fromDate: quotation.rentalStart,
+                            toDate: quotation.rentalEnd
+                        };
+                    }
+                }
+                await tx.reservation.createMany({
+                    data: Object.values(productReservations),
+                    skipDuplicates: true
+                });
+            }
+
+            // For SALE (purchase) items, reduce stock permanently
+            const purchaseLines = quotation.lines.filter(l => l.type === 'SALE');
+            for (const line of purchaseLines) {
+                await tx.product.update({
+                    where: { id: line.productId },
+                    data: { quantityOnHand: { decrement: line.quantity } }
+                });
+            }
 
             // Create Invoice
             const invCount = await tx.invoice.count();
@@ -143,6 +166,40 @@ export async function POST(req) {
                 }
             });
 
+            // Create Pickup Document (only for rental items)
+            if (rentalLines.length > 0) {
+                const pickupCount = await tx.pickup.count();
+                await tx.pickup.create({
+                    data: {
+                        orderId: order.id,
+                        pickupNumber: `PKP-${new Date().getFullYear()}-${(pickupCount + 1).toString().padStart(4, '0')}`,
+                        pickupDate: quotation.rentalStart,
+                        instructions: 'Please bring a valid ID for verification. Check all items before leaving.',
+                        status: 'PENDING',
+                        items: {
+                            create: rentalLines.map(l => ({
+                                productId: l.productId,
+                                quantity: l.quantity
+                            }))
+                        }
+                    }
+                });
+
+                // Create stock movements for items going to customer
+                for (const line of rentalLines) {
+                    await tx.stockMovement.create({
+                        data: {
+                            productId: line.productId,
+                            quantity: -line.quantity,
+                            movementType: 'PICKUP',
+                            referenceId: order.id,
+                            referenceType: 'ORDER',
+                            remarks: `Rented out for order ${order.orderNumber}`
+                        }
+                    });
+                }
+            }
+
             // Update Quotation Status
             await tx.quotation.update({
                 where: { id: quotationId },
@@ -151,6 +208,20 @@ export async function POST(req) {
 
             return order;
         });
+
+        // Fetch complete order with relations for email
+        const completeOrder = await prisma.rentalOrder.findUnique({
+            where: { id: result.id },
+            include: { lines: { include: { product: true } }, customer: true }
+        });
+
+        // Send confirmation email
+        try {
+            await sendOrderConfirmationEmail(completeOrder, quotation.customer);
+        } catch (emailError) {
+            console.error('Failed to send confirmation email:', emailError);
+            // Don't fail the order if email fails
+        }
 
         return NextResponse.json({ success: true, orderId: result.id });
     } catch (error) {

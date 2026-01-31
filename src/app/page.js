@@ -12,24 +12,6 @@ export default function Home() {
         <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] rounded-full bg-indigo-900/30 blur-[120px]" />
       </div>
 
-      {/* Navbar */}
-      <nav className="relative z-10 flex items-center justify-between px-8 py-6 max-w-7xl mx-auto">
-        <div className="text-2xl font-bold tracking-tighter bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-pink-600">
-          JOY JUNCTURE
-        </div>
-        <div className="flex gap-6 items-center">
-          <Link href="/login" className="text-sm font-medium hover:text-purple-400 transition-colors">
-            Login
-          </Link>
-          <Link
-            href="/signup"
-            className="px-5 py-2.5 rounded-full bg-white text-black text-sm font-semibold hover:bg-gray-200 transition-all hover:scale-105 active:scale-95"
-          >
-            Sign Up
-          </Link>
-        </div>
-      </nav>
-
       {/* Hero Section */}
       <main className="relative z-10 flex flex-col items-center justify-center min-h-[85vh] text-center px-4">
         <motion.h1

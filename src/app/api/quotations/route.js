@@ -12,6 +12,36 @@ export async function POST(req) {
 
         // Generate Quotation Number
         const count = await prisma.quotation.count();
+        // Check Availability (Prevent Overbooking)
+        for (const item of items) {
+            const product = await prisma.product.findUnique({
+                where: { id: item.productId },
+                select: { quantityOnHand: true, name: true }
+            });
+
+            if (!product) continue;
+
+            // Find overlapping reservations
+            const start = new Date(startDate);
+            const end = new Date(endDate);
+
+            const conflictingReservations = await prisma.reservation.findMany({
+                where: {
+                    productId: item.productId,
+                    fromDate: { lte: end },
+                    toDate: { gte: start }
+                }
+            });
+
+            const reservedQty = conflictingReservations.reduce((acc, res) => acc + res.quantity, 0);
+
+            if (reservedQty + item.quantity > product.quantityOnHand) {
+                return NextResponse.json({
+                    error: `Product '${product.name}' is unavailable for the selected dates. (Available: ${product.quantityOnHand - reservedQty})`
+                }, { status: 400 });
+            }
+        }
+
         const quotationNumber = `QT-${new Date().getFullYear()}-${(count + 1).toString().padStart(4, '0')}`;
 
         const quotation = await prisma.quotation.create({
@@ -24,6 +54,7 @@ export async function POST(req) {
                 totalAmount: total,
                 rentalStart: new Date(startDate),
                 rentalEnd: new Date(endDate),
+                expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // Default 7 days expiry
                 lines: {
                     create: items.map(item => ({
                         productId: item.productId,

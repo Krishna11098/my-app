@@ -64,31 +64,29 @@ export default function ProductDetails() {
         if (totalPrice <= 0 || !startDate || !endDate) return;
 
         try {
-            const res = await fetch('/api/quotations', {
+            const payload = {
+                userId: user.id,
+                productId: product.id,
+                quantity: 1,
+                type: 'RENTAL',
+                startDate,
+                endDate
+            };
+            console.log('[BOOK NOW] Sending payload:', payload);
+
+            // Add to Cart (Rental) with specific dates
+            const res = await fetch('/api/cart', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    userId: user.id, // Assuming user object has id
-                    startDate,
-                    endDate,
-                    subtotal: totalPrice,
-                    tax: totalPrice * 0.18, // 18% Tax Mock
-                    total: totalPrice * 1.18,
-                    items: [{
-                        productId: product.id,
-                        quantity: 1,
-                        unitPrice: totalPrice, // Simplified logic: one line item = total rental cost for this duration
-                        lineTotal: totalPrice
-                    }]
-                })
+                body: JSON.stringify(payload)
             });
 
-            const data = await res.json();
             if (res.ok) {
-                // Redirect to Checkout Page with the new Quotation ID
-                router.push(`/checkout/${data.quotation.id}`);
+                alert('Added to cart as Rental!');
+                router.push('/cart');
             } else {
-                alert('Failed to book: ' + data.error);
+                const data = await res.json();
+                alert('Failed to book: ' + (data.error || 'Unknown error'));
             }
         } catch (err) {
             console.error(err);
@@ -154,20 +152,53 @@ export default function ProductDetails() {
                             </div>
                         </div>
 
-                        <div className="bg-gray-900/40 p-6 rounded-2xl border border-gray-800 flex justify-between items-center">
-                            <div>
-                                <p className="text-gray-400 text-sm">Estimated Total</p>
-                                <div className="text-3xl font-bold text-white">
-                                    {totalPrice > 0 ? `₹${totalPrice.toLocaleString()}` : '—'}
+                        <div className="bg-gray-900/40 p-6 rounded-2xl border border-gray-800 space-y-4">
+                            <div className="flex justify-between items-center">
+                                <div>
+                                    <p className="text-gray-400 text-sm">Rental Estimate</p>
+                                    <div className="text-3xl font-bold text-white">
+                                        {totalPrice > 0 ? `₹${totalPrice.toLocaleString()}` : '—'}
+                                    </div>
                                 </div>
+                                <button
+                                    onClick={handleRent}
+                                    disabled={totalPrice <= 0}
+                                    className="px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold rounded-xl hover:shadow-lg hover:shadow-purple-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all transform hover:-translate-y-1"
+                                >
+                                    Book Now
+                                </button>
                             </div>
-                            <button
-                                onClick={handleRent}
-                                disabled={totalPrice <= 0}
-                                className="px-8 py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold rounded-xl hover:shadow-lg hover:shadow-purple-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all transform hover:-translate-y-1"
-                            >
-                                Book Now
-                            </button>
+
+                            {/* Buy Option */}
+                            <div className="pt-4 border-t border-gray-800 flex justify-between items-center">
+                                <div>
+                                    <p className="text-gray-400 text-sm">Buy Outright</p>
+                                    <div className="text-xl font-bold text-white">
+                                        ₹{parseFloat(product.salePrice || 0).toLocaleString()}
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={async () => {
+                                        if (!user) return router.push('/login');
+                                        try {
+                                            const payload = { userId: user.id, productId: product.id, quantity: 1, type: 'SALE' };
+                                            console.log('[BUY NOW] Sending payload:', payload);
+                                            const res = await fetch('/api/cart', {
+                                                method: 'POST',
+                                                headers: { 'Content-Type': 'application/json' },
+                                                body: JSON.stringify(payload)
+                                            });
+                                            if (res.ok) {
+                                                alert('Added to cart as Purchase!');
+                                                router.push('/cart');
+                                            }
+                                        } catch (e) { console.error(e); }
+                                    }}
+                                    className="px-6 py-2 bg-gray-800 text-white font-semibold rounded-xl hover:bg-gray-700 transition-colors border border-gray-700 hover:border-gray-600"
+                                >
+                                    Buy Now
+                                </button>
+                            </div>
                         </div>
 
                         <p className="mt-4 text-xs text-center text-gray-500">
