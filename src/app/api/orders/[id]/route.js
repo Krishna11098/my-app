@@ -12,7 +12,10 @@ export async function GET(req, { params }) {
                     include: { product: true }
                 },
                 customer: {
-                    select: { id: true, name: true, email: true, companyName: true, gstin: true }
+                    select: { id: true, name: true, email: true, companyName: true, gstin: true, phone: true }
+                },
+                vendor: {
+                    select: { id: true, name: true, companyName: true, companyLogo: true, email: true, phone: true }
                 },
                 invoice: {
                     include: { payments: true }
@@ -25,7 +28,8 @@ export async function GET(req, { params }) {
                 },
                 reservations: true,
                 pickupAddress: true,
-                returnAddress: true
+                returnAddress: true,
+                billingAddress: true
             }
         });
 

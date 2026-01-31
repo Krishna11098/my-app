@@ -11,13 +11,14 @@ const razorpay = new Razorpay({
 // POST: Create a payment order
 export async function POST(req) {
     try {
-        const { orderId, amount, invoiceId } = await req.json();
+        const { orderId, amount, invoiceId, quotationId } = await req.json();
 
-        if (!orderId && !invoiceId) {
-            return NextResponse.json({ error: 'Order ID or Invoice ID required' }, { status: 400 });
+        // For checkout flow, we can create payment with just amount and quotationId
+        if (!orderId && !invoiceId && !quotationId && !amount) {
+            return NextResponse.json({ error: 'Order ID, Invoice ID, Quotation ID, or amount required' }, { status: 400 });
         }
 
-        let order, invoice;
+        let order, invoice, paymentAmount;
 
         if (orderId) {
             order = await prisma.rentalOrder.findUnique({
@@ -28,7 +29,8 @@ export async function POST(req) {
                 return NextResponse.json({ error: 'Order not found' }, { status: 404 });
             }
             invoice = order.invoice;
-        } else {
+            paymentAmount = amount || (invoice ? Number(invoice.totalAmount) - Number(invoice.amountPaid) : Number(order.totalAmount) - Number(order.amountPaid));
+        } else if (invoiceId) {
             invoice = await prisma.invoice.findUnique({
                 where: { id: invoiceId },
                 include: { customer: true }
@@ -36,9 +38,20 @@ export async function POST(req) {
             if (!invoice) {
                 return NextResponse.json({ error: 'Invoice not found' }, { status: 404 });
             }
+            paymentAmount = amount || Number(invoice.totalAmount) - Number(invoice.amountPaid);
+        } else if (quotationId) {
+            // For checkout - payment before order creation
+            const quotation = await prisma.quotation.findUnique({
+                where: { id: quotationId }
+            });
+            if (!quotation) {
+                return NextResponse.json({ error: 'Quotation not found' }, { status: 404 });
+            }
+            paymentAmount = amount || Number(quotation.totalAmount);
+        } else {
+            // Direct amount payment
+            paymentAmount = amount;
         }
-
-        const paymentAmount = amount || (invoice ? Number(invoice.totalAmount) - Number(invoice.amountPaid) : Number(order.totalAmount) - Number(order.amountPaid));
 
         if (paymentAmount <= 0) {
             return NextResponse.json({ error: 'No amount due' }, { status: 400 });
@@ -51,12 +64,14 @@ export async function POST(req) {
             receipt: `rcpt_${Date.now()}`,
             notes: {
                 orderId: orderId || '',
-                invoiceId: invoice?.id || ''
+                invoiceId: invoice?.id || '',
+                quotationId: quotationId || ''
             }
         });
 
         return NextResponse.json({
             id: razorpayOrder.id,
+            razorpayOrderId: razorpayOrder.id,
             amount: razorpayOrder.amount,
             currency: razorpayOrder.currency,
             key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID
@@ -76,7 +91,8 @@ export async function PUT(req) {
             razorpay_signature,
             orderId,
             invoiceId,
-            amount
+            amount,
+            quotationId
         } = await req.json();
 
         // Verify signature
@@ -90,23 +106,40 @@ export async function PUT(req) {
             return NextResponse.json({ error: 'Invalid payment signature' }, { status: 400 });
         }
 
+        // For checkout flow (quotation payment), just verify - order will be created in confirm
+        if (quotationId && !orderId && !invoiceId) {
+            return NextResponse.json({ 
+                success: true, 
+                verified: true,
+                paymentId: razorpay_payment_id,
+                message: 'Payment verified for checkout'
+            });
+        }
+
         const paymentAmount = Number(amount) / 100; // Convert from paise
 
         const result = await prisma.$transaction(async (tx) => {
             // Create payment record
             const paymentCount = await tx.payment.count();
-            const payment = await tx.payment.create({
-                data: {
-                    paymentNumber: `PAY-${new Date().getFullYear()}-${(paymentCount + 1).toString().padStart(4, '0')}`,
-                    invoiceId: invoiceId || null,
-                    orderId: orderId || null,
-                    amount: paymentAmount,
-                    method: 'RAZORPAY',
-                    transactionId: razorpay_payment_id,
-                    status: 'COMPLETED',
-                    paidAt: new Date()
-                }
-            });
+            
+            const paymentData = {
+                paymentNumber: `PAY-${new Date().getFullYear()}-${(paymentCount + 1).toString().padStart(4, '0')}`,
+                amount: paymentAmount,
+                method: 'RAZORPAY',
+                transactionId: razorpay_payment_id,
+                status: 'COMPLETED',
+                paidAt: new Date()
+            };
+
+            // Only add relations if they exist
+            if (invoiceId) {
+                paymentData.invoice = { connect: { id: invoiceId } };
+            }
+            if (orderId) {
+                paymentData.order = { connect: { id: orderId } };
+            }
+
+            const payment = await tx.payment.create({ data: paymentData });
 
             // Update invoice if exists
             if (invoiceId) {

@@ -21,7 +21,32 @@ enum RentalPeriodUnit {
   HOUR
   DAY
   WEEK
+  MONTH
   CUSTOM
+}
+
+enum ProductType {
+  GOODS
+  SERVICE
+}
+
+enum PriceUnit {
+  PER_HOUR
+  PER_DAY
+  PER_WEEK
+  PER_MONTH
+  PER_UNIT
+}
+
+enum DeliveryMethod {
+  STANDARD_DELIVERY
+  PICKUP_FROM_STORE
+}
+
+enum AddressType {
+  DELIVERY
+  BILLING
+  BOTH
 }
 
 enum OrderStatus {
@@ -120,20 +145,29 @@ model User {
   resetToken         String?
   resetExpiry        DateTime?
   deletedAt          DateTime? // Soft delete
+  profilePhoto       String?   // User profile photo URL
+  companyLogo        String?   // Vendor company logo URL
+  bio                String?   // Short bio/description
+  phone              String?   // Contact phone number
 
   rateLimitViolations RateLimitViolation[]
   sessions            Session[]
   analyticsEvents     AnalyticsEvent[]
 
   // Relations
-  addresses     Address[]
-  quotations    Quotation[]
-  orders        RentalOrder[]
-  invoices      Invoice[]
-  notifications Notification[]
-  reports       Report[]
-  auditLogs     AuditLog[]
-  configUpdates SystemConfig[]
+  addresses           Address[]
+  quotations          Quotation[]
+  orders              RentalOrder[]        @relation("CustomerOrders")
+  vendorOrders        RentalOrder[]        @relation("VendorOrders")
+  invoices            Invoice[]            @relation("CustomerInvoices")
+  vendorInvoices      Invoice[]            @relation("VendorInvoices")
+  notifications       Notification[]
+  reports             Report[]
+  auditLogs           AuditLog[]
+  configUpdates       SystemConfig[]
+  products            Product[]            @relation("VendorProducts")
+  cartItems           CartItem[]
+  savedPaymentMethods SavedPaymentMethod[]
 
   otp                 String?
   otpExpiry           DateTime?
@@ -166,19 +200,25 @@ model RateLimitViolation {
 }
 
 model Address {
-  id         String  @id @default(cuid())
+  id         String      @id @default(cuid())
   userId     String
+  label      String?     // e.g., "Home", "Office"
   street     String
   city       String
   state      String
   postalCode String
-  country    String  @default("India")
-  isDefault  Boolean @default(false)
+  country    String      @default("India")
+  type       AddressType @default(BOTH)
+  isDefault  Boolean     @default(false)
 
-  pickupOrders RentalOrder[] @relation("OrderPickupAddress")
-  returnOrders RentalOrder[] @relation("OrderReturnAddress")
+  pickupOrders  RentalOrder[] @relation("OrderPickupAddress")
+  returnOrders  RentalOrder[] @relation("OrderReturnAddress")
+  billingOrders RentalOrder[] @relation("OrderBillingAddress")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime? @updatedAt
 
   @@index([userId])
 }
@@ -228,22 +268,27 @@ model AnalyticsEvent {
 }
 
 model Product {
-  id              String    @id @default(cuid())
+  id              String       @id @default(cuid())
+  vendorId        String?      // Which vendor owns this product (optional for migration)
   name            String
   description     String?
-  sku             String    @unique
-  isRentable      Boolean   @default(true)
-  isPublished     Boolean   @default(false)
+  sku             String       @unique
+  productType     ProductType  @default(GOODS)  // GOODS or SERVICE
+  category        String?      // Furniture, Electronics, etc.
+  priceUnit       PriceUnit    @default(PER_DAY) // Per Hour, Day, Week, etc.
+  isRentable      Boolean      @default(true)
+  isPublished     Boolean      @default(false)
   costPrice       Decimal
   salePrice       Decimal
   quantityOnHand  Int
-  minRentalPeriod Int // in hours
-  maxRentalPeriod Int // in hours
-  attributes      Json? // e.g., {"brand": "Bosch", "color": "Red"}
+  minRentalPeriod Int          // in hours
+  maxRentalPeriod Int          // in hours
+  attributes      Json?        // e.g., {"brand": "Bosch", "color": "Red"}
   imageUrls       String[]
-  deletedAt       DateTime? // Soft delete
+  deletedAt       DateTime?    // Soft delete
 
   // Relations
+  vendor         User?            @relation("VendorProducts", fields: [vendorId], references: [id])
   variants       ProductVariant[]
   quotations     QuotationLine[]
   orderLines     OrderLine[]
@@ -252,11 +297,14 @@ model Product {
   returnItems    ReturnItem[]
   priceConfigs   PriceConfig[]
   stockMovements StockMovement[]
+  cartItems      CartItem[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([vendorId])
   @@index([sku, isRentable, isPublished])
+  @@index([category])
 }
 
 model ProductVariant {
@@ -321,14 +369,16 @@ enum LineType {
 }
 
 model QuotationLine {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   quotationId String
   productId   String
   variantId   String?
-  type        LineType @default(RENTAL)
+  type        LineType  @default(RENTAL)
   quantity    Int
   unitPrice   Decimal
   lineTotal   Decimal
+  rentalStart DateTime?
+  rentalEnd   DateTime?
 
   quotation Quotation       @relation(fields: [quotationId], references: [id], onDelete: Cascade)
   product   Product         @relation(fields: [productId], references: [id])
@@ -338,48 +388,63 @@ model QuotationLine {
 }
 
 model RentalOrder {
-  id              String      @id @default(cuid())
-  customerId      String
-  quotationId     String?     @unique
-  orderNumber     String      @unique
-  status          OrderStatus @default(CONFIRMED)
-  subtotal        Decimal
-  taxAmount       Decimal
-  totalAmount     Decimal
-  securityDeposit Decimal
-  amountPaid      Decimal     @default(0)
-  rentalStart     DateTime
-  rentalEnd       DateTime
-  pickupAddressId String
-  returnAddressId String?
+  id               String         @id @default(cuid())
+  customerId       String
+  vendorId         String?        // Which vendor this order belongs to (optional for migration)
+  quotationId      String?        @unique
+  orderNumber      String         @unique
+  status           OrderStatus    @default(CONFIRMED)
+  subtotal         Decimal
+  taxAmount        Decimal
+  totalAmount      Decimal
+  securityDeposit  Decimal
+  amountPaid       Decimal        @default(0)
+  discountAmount   Decimal        @default(0)
+  shippingAmount   Decimal        @default(0)
+  downpayment      Decimal        @default(0)
+  rentalStart      DateTime
+  rentalEnd        DateTime
+  deliveryMethod   DeliveryMethod @default(STANDARD_DELIVERY)
+  pickupAddressId  String
+  returnAddressId  String?
+  billingAddressId String?        // Separate billing address
+  billingIsSame    Boolean        @default(true) // Billing = Delivery toggle
+  couponCode       String?        // Applied coupon code
+  notes            String?        // Order notes
+  termsAccepted    Boolean        @default(true)
 
   // Relations
-  customer      User          @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  quotation     Quotation?    @relation(fields: [quotationId], references: [id])
-  pickupAddress Address       @relation("OrderPickupAddress", fields: [pickupAddressId], references: [id])
-  returnAddress Address?      @relation("OrderReturnAddress", fields: [returnAddressId], references: [id])
-  lines         OrderLine[]
-  invoice       Invoice?
-  pickup        Pickup?
-  return        Return?
-  payments      Payment[]
-  reservations  Reservation[]
+  customer       User          @relation("CustomerOrders", fields: [customerId], references: [id], onDelete: Cascade)
+  vendor         User?         @relation("VendorOrders", fields: [vendorId], references: [id])
+  quotation      Quotation?    @relation(fields: [quotationId], references: [id])
+  pickupAddress  Address       @relation("OrderPickupAddress", fields: [pickupAddressId], references: [id])
+  returnAddress  Address?      @relation("OrderReturnAddress", fields: [returnAddressId], references: [id])
+  billingAddress Address?      @relation("OrderBillingAddress", fields: [billingAddressId], references: [id])
+  lines          OrderLine[]
+  invoice        Invoice?
+  pickup         Pickup?
+  return         Return?
+  payments       Payment[]
+  reservations   Reservation[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([customerId, status, orderNumber])
+  @@index([vendorId])
 }
 
 model OrderLine {
-  id        String   @id @default(cuid())
-  orderId   String
-  productId String
-  variantId String?
-  type      LineType @default(RENTAL)
-  quantity  Int
-  unitPrice Decimal
-  lineTotal Decimal
+  id          String    @id @default(cuid())
+  orderId     String
+  productId   String
+  variantId   String?
+  type        LineType  @default(RENTAL)
+  quantity    Int
+  unitPrice   Decimal
+  lineTotal   Decimal
+  rentalStart DateTime?
+  rentalEnd   DateTime?
 
   order   RentalOrder     @relation(fields: [orderId], references: [id], onDelete: Cascade)
   product Product         @relation(fields: [productId], references: [id])
@@ -485,6 +550,7 @@ model Invoice {
   orderId         String?       @unique
   quotationId     String?       @unique
   customerId      String
+  vendorId        String?       // Which vendor this invoice belongs to (optional for migration)
   status          InvoiceStatus @default(DRAFT)
   issueDate       DateTime
   dueDate         DateTime
@@ -493,11 +559,14 @@ model Invoice {
   totalAmount     Decimal
   amountPaid      Decimal       @default(0)
   securityDeposit Decimal
+  discountAmount  Decimal       @default(0)
+  shippingAmount  Decimal       @default(0)
   notes           String?
   pdfUrl          String?
 
   // Relations
-  customer  User         @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  customer  User         @relation("CustomerInvoices", fields: [customerId], references: [id], onDelete: Cascade)
+  vendor    User?        @relation("VendorInvoices", fields: [vendorId], references: [id])
   order     RentalOrder? @relation(fields: [orderId], references: [id])
   quotation Quotation?   @relation(fields: [quotationId], references: [id])
   payments  Payment[]
@@ -506,6 +575,7 @@ model Invoice {
   updatedAt DateTime @updatedAt
 
   @@index([customerId, status, invoiceNumber])
+  @@index([vendorId])
 }
 
 model Payment {
@@ -604,4 +674,138 @@ model SystemConfig {
 
   @@index([key])
   @@index([category])
+}
+
+// ====================
+// ATTRIBUTE & CATEGORY CONFIGURATION
+// ====================
+
+// Attribute configurations (Brand, Color, Size, etc.)
+model AttributeConfig {
+  id          String   @id @default(cuid())
+  name        String   @unique // e.g., "Brand", "Color", "Size"
+  displayName String   // Human-readable name
+  values      String[] // Possible values: ["Bosch", "Makita"] or ["Red", "Blue"]
+  isActive    Boolean  @default(true)
+  vendorId    String?  // Null means global/admin-level
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@index([vendorId])
+}
+
+// Product categories
+model CategoryConfig {
+  id          String   @id @default(cuid())
+  name        String   @unique // e.g., "Furniture", "Electronics"
+  displayName String
+  parentId    String?  // For hierarchical categories
+  isActive    Boolean  @default(true)
+  
+  parent      CategoryConfig?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children    CategoryConfig[] @relation("CategoryHierarchy")
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@index([parentId])
+}
+
+// Rental period templates (Daily, Hourly, Weekly, etc.)
+model RentalPeriodConfig {
+  id           String           @id @default(cuid())
+  name         String           @unique // e.g., "Daily", "Hourly"
+  periodUnit   RentalPeriodUnit
+  duration     Int              // Number of units
+  isActive     Boolean          @default(true)
+  description  String?
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ====================
+// CART & CHECKOUT
+// ====================
+
+model CartItem {
+  id            String    @id @default(cuid())
+  userId        String
+  productId     String
+  variantId     String?
+  quantity      Int       @default(1)
+  rentalStart   DateTime?
+  rentalEnd     DateTime?
+  savedForLater Boolean   @default(false) // "Save for Later" feature
+  
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@unique([userId, productId, variantId])
+  @@index([userId])
+}
+
+// Saved payment methods for customers
+model SavedPaymentMethod {
+  id            String        @id @default(cuid())
+  userId        String
+  method        PaymentMethod
+  cardLast4     String?       // Last 4 digits: "4242"
+  cardBrand     String?       // "Visa", "Mastercard"
+  cardExpMonth  Int?
+  cardExpYear   Int?
+  upiId         String?       // For UPI
+  isDefault     Boolean       @default(false)
+  razorpayToken String?       // Razorpay saved card token
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@index([userId])
+}
+
+// Coupon codes for discounts
+model Coupon {
+  id              String    @id @default(cuid())
+  code            String    @unique
+  description     String?
+  discountType    String    // "PERCENTAGE" or "FIXED"
+  discountValue   Decimal   // e.g., 10 (for 10% or ₹10)
+  minOrderAmount  Decimal?  // Minimum order amount to apply
+  maxDiscount     Decimal?  // Cap for percentage discounts
+  usageLimit      Int?      // Total uses allowed
+  usageCount      Int       @default(0)
+  perUserLimit    Int       @default(1) // Uses per user
+  validFrom       DateTime
+  validUntil      DateTime
+  isActive        Boolean   @default(true)
+  vendorId        String?   // Vendor-specific coupon (null = global)
+  
+  usages CouponUsage[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@index([code])
+  @@index([vendorId])
+}
+
+model CouponUsage {
+  id       String @id @default(cuid())
+  couponId String
+  userId   String
+  orderId  String?
+  
+  coupon Coupon @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  
+  createdAt DateTime @default(now())
+  
+  @@unique([couponId, userId, orderId])
+  @@index([userId])
 }

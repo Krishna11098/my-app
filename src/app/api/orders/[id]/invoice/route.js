@@ -10,6 +10,17 @@ export async function GET(req, { params }) {
             include: {
                 lines: { include: { product: true } },
                 customer: true,
+                vendor: {
+                    select: { 
+                        id: true, 
+                        name: true, 
+                        companyName: true, 
+                        companyLogo: true, 
+                        gstin: true,
+                        email: true,
+                        phone: true
+                    }
+                },
                 invoice: true,
                 pickupAddress: true
             }
@@ -27,6 +38,7 @@ export async function GET(req, { params }) {
                 data: {
                     orderId: order.id,
                     customerId: order.customerId,
+                    vendorId: order.vendorId, // Link to vendor
                     invoiceNumber: `INV-${new Date().getFullYear()}-${(invCount + 1).toString().padStart(4, '0')}`,
                     status: order.amountPaid >= order.totalAmount ? 'PAID' : order.amountPaid > 0 ? 'PARTIAL' : 'DRAFT',
                     issueDate: new Date(),
@@ -56,6 +68,9 @@ export async function GET(req, { params }) {
 
 function generateInvoiceHTML(order, invoice) {
     const rentalDays = Math.ceil((new Date(order.rentalEnd) - new Date(order.rentalStart)) / (1000 * 60 * 60 * 24));
+    const vendor = order.vendor;
+    const vendorName = vendor?.companyName || vendor?.name || 'JOY JUNCTURE';
+    const vendorLogo = vendor?.companyLogo;
     
     return `
 <!DOCTYPE html>
@@ -69,7 +84,8 @@ function generateInvoiceHTML(order, invoice) {
         body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f5f5f5; padding: 40px; }
         .invoice { max-width: 800px; margin: 0 auto; background: white; padding: 40px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); border-radius: 12px; }
         .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #e0e0e0; padding-bottom: 20px; margin-bottom: 30px; }
-        .logo { font-size: 28px; font-weight: bold; background: linear-gradient(135deg, #9333ea, #4f46e5); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .logo { font-size: 28px; font-weight: bold; background: linear-gradient(135deg, #9333ea, #4f46e5); -webkit-background-clip: text; -webkit-text-fill-color: transparent; display: flex; align-items: center; gap: 12px; }
+        .logo img { height: 50px; width: auto; border-radius: 8px; }
         .invoice-title { text-align: right; }
         .invoice-title h1 { font-size: 32px; color: #1a1a1a; }
         .invoice-title p { color: #666; margin-top: 5px; }
@@ -96,6 +112,8 @@ function generateInvoiceHTML(order, invoice) {
         .rental-period { background: #f8f9fa; padding: 15px 20px; border-radius: 8px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
         .rental-period span { color: #666; }
         .rental-period strong { color: #1a1a1a; }
+        .vendor-info { background: #f8f9fa; padding: 12px 16px; border-radius: 8px; margin-bottom: 20px; font-size: 13px; }
+        .vendor-info strong { color: #333; }
         @media print {
             body { padding: 0; background: white; }
             .invoice { box-shadow: none; }
@@ -108,13 +126,25 @@ function generateInvoiceHTML(order, invoice) {
 <body>
     <div class="invoice">
         <div class="header">
-            <div class="logo">JOY JUNCTURE</div>
+            <div class="logo">
+                ${vendorLogo ? `<img src="${vendorLogo}" alt="${vendorName}" />` : ''}
+                <span>${vendorName}</span>
+            </div>
             <div class="invoice-title">
                 <h1>INVOICE</h1>
                 <p>${invoice.invoiceNumber}</p>
                 <span class="status status-${invoice.status.toLowerCase()}">${invoice.status}</span>
             </div>
         </div>
+
+        ${vendor ? `
+        <div class="vendor-info">
+            <strong>Sold By:</strong> ${vendorName}
+            ${vendor.gstin ? ` | <strong>GSTIN:</strong> ${vendor.gstin}` : ''}
+            ${vendor.email ? ` | ${vendor.email}` : ''}
+            ${vendor.phone ? ` | ${vendor.phone}` : ''}
+        </div>
+        ` : ''}
 
         <div class="meta">
             <div class="meta-box">
@@ -152,21 +182,29 @@ function generateInvoiceHTML(order, invoice) {
                 <tr>
                     <th>Item</th>
                     <th>Type</th>
+                    <th>Rental Period</th>
                     <th>Qty</th>
                     <th class="text-right">Unit Price</th>
                     <th class="text-right">Amount</th>
                 </tr>
             </thead>
             <tbody>
-                ${order.lines.map(line => `
+                ${order.lines.map(line => {
+                    const lineStart = line.rentalStart || order.rentalStart;
+                    const lineEnd = line.rentalEnd || order.rentalEnd;
+                    const lineDays = Math.ceil((new Date(lineEnd) - new Date(lineStart)) / (1000 * 60 * 60 * 24));
+                    return `
                     <tr>
                         <td class="item-name">${line.product.name}</td>
                         <td><span class="item-type ${line.type === 'SALE' ? 'type-sale' : 'type-rental'}">${line.type === 'SALE' ? 'Purchase' : 'Rental'}</span></td>
+                        <td style="font-size: 12px; color: #666;">
+                            ${line.type === 'SALE' ? '-' : `${new Date(lineStart).toLocaleDateString('en-IN')} to ${new Date(lineEnd).toLocaleDateString('en-IN')}<br><strong>${lineDays} days</strong>`}
+                        </td>
                         <td>${line.quantity}</td>
                         <td class="text-right">₹${Number(line.unitPrice).toLocaleString('en-IN')}</td>
                         <td class="text-right">₹${Number(line.lineTotal).toLocaleString('en-IN')}</td>
                     </tr>
-                `).join('')}
+                `}).join('')}
             </tbody>
         </table>
 

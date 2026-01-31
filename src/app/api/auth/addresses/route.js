@@ -5,11 +5,11 @@ import jwt from 'jsonwebtoken';
 
 async function getUserFromToken() {
     const cookieStore = await cookies();
-    const token = cookieStore.get('auth-token')?.value;
+    const token = cookieStore.get('token')?.value;
     if (!token) return null;
     try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
-        return decoded;
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret');
+        return { id: decoded.userId, ...decoded };
     } catch {
         return null;
     }
@@ -43,7 +43,7 @@ export async function POST(req) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        const { street, city, state, postalCode, country, isDefault } = await req.json();
+        const { label, street, city, state, postalCode, country, type, isDefault } = await req.json();
 
         if (!street || !city || !state || !postalCode) {
             return NextResponse.json({ error: 'All address fields are required' }, { status: 400 });
@@ -63,11 +63,13 @@ export async function POST(req) {
         const address = await prisma.address.create({
             data: {
                 userId: user.id,
+                label: label || null,
                 street,
                 city,
                 state,
                 postalCode,
                 country: country || 'India',
+                type: type || 'BOTH',
                 isDefault: isDefault || existingCount === 0 // First address is default
             }
         });

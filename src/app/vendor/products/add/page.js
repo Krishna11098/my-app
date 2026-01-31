@@ -15,9 +15,13 @@ export default function AddProduct() {
         description: '',
         sku: '',
         category: '',
+        productType: 'GOODS',
+        priceUnit: 'PER_DAY',
         quantityOnHand: 1,
         costPrice: '',
         salePrice: '',
+        minRentalPeriod: 1,
+        maxRentalPeriod: 720,
         isPublished: true, // Default to true as per flow
     });
 
@@ -154,6 +158,14 @@ export default function AddProduct() {
                                     value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} placeholder="e.g. Canon EOS R5" />
                             </div>
                             <div>
+                                <label className="block text-sm text-gray-400 mb-1">Product Type</label>
+                                <select required className="w-full bg-black border border-gray-700 rounded-lg p-3 text-white outline-none"
+                                    value={formData.productType} onChange={e => setFormData({ ...formData, productType: e.target.value })}>
+                                    <option value="GOODS">Goods (Physical Product)</option>
+                                    <option value="SERVICE">Service</option>
+                                </select>
+                            </div>
+                            <div>
                                 <label className="block text-sm text-gray-400 mb-1">Category</label>
                                 <select required className="w-full bg-black border border-gray-700 rounded-lg p-3 text-white outline-none"
                                     value={formData.category} onChange={e => setFormData({ ...formData, category: e.target.value })}>
@@ -164,6 +176,20 @@ export default function AddProduct() {
                                     <option value="Outdoors">Outdoors</option>
                                     <option value="Tools">Tools</option>
                                     <option value="Events">Events</option>
+                                    <option value="Vehicles">Vehicles</option>
+                                    <option value="Photography">Photography</option>
+                                    <option value="Audio/Video">Audio/Video</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm text-gray-400 mb-1">Price Unit</label>
+                                <select required className="w-full bg-black border border-gray-700 rounded-lg p-3 text-white outline-none"
+                                    value={formData.priceUnit} onChange={e => setFormData({ ...formData, priceUnit: e.target.value })}>
+                                    <option value="PER_HOUR">Per Hour</option>
+                                    <option value="PER_DAY">Per Day</option>
+                                    <option value="PER_WEEK">Per Week</option>
+                                    <option value="PER_MONTH">Per Month</option>
+                                    <option value="PER_UNIT">Per Unit (Sale)</option>
                                 </select>
                             </div>
                             <div>
@@ -231,7 +257,7 @@ export default function AddProduct() {
                             <div>
                                 <label className="block text-sm text-gray-400 mb-1">Quantity On Hand</label>
                                 <input type="number" required className="w-full bg-black border border-gray-700 rounded-lg p-3 outline-none"
-                                    value={formData.quantityOnHand} onChange={e => setFormData({ ...formData, quantityOnHand: e.target.value })} />
+                                    value={formData.quantityOnHand} onChange={e => setFormData({ ...formData, quantityOnHand: e.target.value && e.target.value > 0 ? e.target.value : 0 })} />
                             </div>
                             <div>
                                 <label className="block text-sm text-gray-400 mb-1">Item Value (Cost)</label>
@@ -242,6 +268,16 @@ export default function AddProduct() {
                                 <label className="block text-sm text-gray-400 mb-1">Retail Price (If Sold)</label>
                                 <input type="number" required className="w-full bg-black border border-gray-700 rounded-lg p-3 outline-none"
                                     value={formData.salePrice} onChange={e => setFormData({ ...formData, salePrice: e.target.value })} placeholder="₹" />
+                            </div>
+                            <div>
+                                <label className="block text-sm text-gray-400 mb-1">Min Rental Period (hours)</label>
+                                <input type="number" required className="w-full bg-black border border-gray-700 rounded-lg p-3 outline-none"
+                                    value={formData.minRentalPeriod} onChange={e => setFormData({ ...formData, minRentalPeriod: parseInt(e.target.value) || 1 })} placeholder="e.g. 1" />
+                            </div>
+                            <div>
+                                <label className="block text-sm text-gray-400 mb-1">Max Rental Period (hours)</label>
+                                <input type="number" required className="w-full bg-black border border-gray-700 rounded-lg p-3 outline-none"
+                                    value={formData.maxRentalPeriod} onChange={e => setFormData({ ...formData, maxRentalPeriod: parseInt(e.target.value) || 720 })} placeholder="e.g. 720" />
                             </div>
                         </div>
                     </div>

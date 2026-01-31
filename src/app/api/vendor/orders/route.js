@@ -1,29 +1,81 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { cookies } from 'next/headers';
+import jwt from 'jsonwebtoken';
+
+// Helper to get vendor from token
+async function getVendorFromToken() {
+    const cookieStore = await cookies();
+    const token = cookieStore.get('token')?.value;
+    if (!token) return null;
+    
+    try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const user = await prisma.user.findUnique({
+            where: { id: decoded.userId },
+            select: { id: true, role: true }
+        });
+        if (!user || user.role !== 'VENDOR') return null;
+        return user;
+    } catch {
+        return null;
+    }
+}
 
 export async function GET(req) {
     try {
-        // Fetch Confirmed Orders (RentalOrder)
+        const vendor = await getVendorFromToken();
+        if (!vendor) {
+            return NextResponse.json({ error: 'Unauthorized - Vendor only' }, { status: 401 });
+        }
+
+        // Fetch Orders belonging to this vendor
+        // Orders are linked to vendor through vendorId field
         const rentalOrders = await prisma.rentalOrder.findMany({
-            include: { customer: true },
+            where: {
+                vendorId: vendor.id  // Only vendor's orders
+            },
+            include: { 
+                customer: {
+                    select: { id: true, name: true, email: true, phone: true }
+                },
+                lines: {
+                    include: {
+                        product: {
+                            select: { id: true, name: true, imageUrls: true }
+                        }
+                    }
+                },
+                pickup: true,
+                return: true
+            },
             orderBy: { createdAt: 'desc' }
         });
 
-        // Optionally Fetch Pending Quotations if you want Vendor to see Drafts?
-        // Usually Vendor only cares about Confirmed or "Sent" quotations.
-        // Let's stick to RentalOrders for the "Orders" tab. 
-        // Or if we want to see "Requests to approve", we check Quotations with status 'SENT'.
-        // Current flow: Customer confirms -> 'CONFIRMED' Order is created.
-
         return NextResponse.json(rentalOrders);
     } catch (error) {
+        console.error("Fetch Orders Error:", error);
         return NextResponse.json({ error: 'Error fetching orders' }, { status: 500 });
     }
 }
 
 export async function PUT(req) {
     try {
-        const { id, status } = await req.json(); // id is Order ID
+        const vendor = await getVendorFromToken();
+        if (!vendor) {
+            return NextResponse.json({ error: 'Unauthorized - Vendor only' }, { status: 401 });
+        }
+
+        const { id, status } = await req.json();
+
+        // Verify vendor owns this order
+        const existingOrder = await prisma.rentalOrder.findUnique({ where: { id } });
+        if (!existingOrder) {
+            return NextResponse.json({ error: 'Order not found' }, { status: 404 });
+        }
+        if (existingOrder.vendorId && existingOrder.vendorId !== vendor.id) {
+            return NextResponse.json({ error: 'Unauthorized - Not your order' }, { status: 403 });
+        }
 
         // Update Order Status
         const updatedOrder = await prisma.rentalOrder.update({
@@ -33,15 +85,8 @@ export async function PUT(req) {
 
         // Handle Status Transitions
         if (status === 'RETURNED') {
-            // Logic: Release Stock (Update Reservation)
-            // If returned early, we free up the calendar.
-            // Find reservations for this order
             const reservations = await prisma.reservation.findMany({ where: { orderId: id } });
-
             const now = new Date();
-
-            // Update toDates to NOW if currently in future (Early Return)
-            // Or just logging return.
 
             for (const res of reservations) {
                 if (new Date(res.toDate) > now) {
@@ -52,8 +97,6 @@ export async function PUT(req) {
                 }
             }
 
-            // Also update Return entity if exists or create one (as per schema requirement "Return document generated")
-            // Check if return doc exists
             const existingReturn = await prisma.return.findUnique({ where: { orderId: id } });
             if (!existingReturn) {
                 const count = await prisma.return.count();
@@ -63,14 +106,12 @@ export async function PUT(req) {
                         returnNumber: `RET-${new Date().getFullYear()}-${(count + 1).toString().padStart(4, '0')}`,
                         returnDate: now,
                         status: 'COMPLETED',
-                        // items logic omitted for MVP brevity, should copy order items
                     }
                 });
             }
         }
 
         if (status === 'PICKED_UP') {
-            // Create Pickup document
             const existingPickup = await prisma.pickup.findUnique({ where: { orderId: id } });
             if (!existingPickup) {
                 const count = await prisma.pickup.count();

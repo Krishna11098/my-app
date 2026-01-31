@@ -145,25 +145,38 @@ export default function OrderDetailsPage() {
                         <div className="bg-gray-900/50 border border-gray-800 rounded-2xl p-6">
                             <h2 className="text-xl font-bold mb-4">Order Items</h2>
                             <div className="space-y-3">
-                                {order.lines?.map((line) => (
-                                    <div key={line.id} className="flex justify-between items-center bg-black/40 p-4 rounded-xl">
-                                        <div className="flex items-center gap-4">
-                                            {line.product?.imageUrls?.[0] && (
-                                                <img src={line.product.imageUrls[0]} alt={line.product.name} className="w-16 h-16 object-cover rounded-lg" />
-                                            )}
-                                            <div>
-                                                <p className="font-medium">{line.product?.name}</p>
-                                                <div className="flex items-center gap-2 mt-1">
-                                                    <span className={`text-xs px-2 py-0.5 rounded-full ${line.type === 'SALE' ? 'bg-green-500/20 text-green-400' : 'bg-purple-500/20 text-purple-400'}`}>
-                                                        {line.type === 'SALE' ? '🛒 Purchase' : '📅 Rental'}
-                                                    </span>
-                                                    <span className="text-xs text-gray-500">Qty: {line.quantity}</span>
+                                {order.lines?.map((line) => {
+                                    const lineStart = line.rentalStart || order.rentalStart;
+                                    const lineEnd = line.rentalEnd || order.rentalEnd;
+                                    const lineDays = Math.ceil((new Date(lineEnd) - new Date(lineStart)) / (1000 * 60 * 60 * 24));
+                                    
+                                    return (
+                                        <div key={line.id} className="bg-black/40 p-4 rounded-xl">
+                                            <div className="flex justify-between items-center">
+                                                <div className="flex items-center gap-4">
+                                                    {line.product?.imageUrls?.[0] && (
+                                                        <img src={line.product.imageUrls[0]} alt={line.product.name} className="w-16 h-16 object-cover rounded-lg" />
+                                                    )}
+                                                    <div>
+                                                        <p className="font-medium">{line.product?.name}</p>
+                                                        <div className="flex items-center gap-2 mt-1">
+                                                            <span className={`text-xs px-2 py-0.5 rounded-full ${line.type === 'SALE' ? 'bg-green-500/20 text-green-400' : 'bg-purple-500/20 text-purple-400'}`}>
+                                                                {line.type === 'SALE' ? '🛒 Purchase' : '📅 Rental'}
+                                                            </span>
+                                                            <span className="text-xs text-gray-500">Qty: {line.quantity}</span>
+                                                        </div>
+                                                        {line.type !== 'SALE' && (
+                                                            <p className="text-xs text-gray-400 mt-1">
+                                                                {new Date(lineStart).toLocaleDateString('en-IN')} - {new Date(lineEnd).toLocaleDateString('en-IN')} ({lineDays} days)
+                                                            </p>
+                                                        )}
+                                                    </div>
                                                 </div>
+                                                <span className="font-bold">₹{Number(line.lineTotal).toLocaleString()}</span>
                                             </div>
                                         </div>
-                                        <span className="font-bold">₹{Number(line.lineTotal).toLocaleString()}</span>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         </div>
 
@@ -227,25 +240,39 @@ export default function OrderDetailsPage() {
                         {/* Shipping / Delivery Info */}
                         {(order.pickupAddress || order.returnAddress) && (
                             <div className="bg-gray-900/50 border border-gray-800 rounded-2xl p-6">
-                                <h2 className="text-xl font-bold mb-4">📍 Addresses</h2>
+                                <h2 className="text-xl font-bold mb-4">📍 Delivery Information</h2>
+                                
+                                {/* Delivery Method */}
+                                <div className="mb-6 p-4 bg-black/40 rounded-xl">
+                                    <p className="text-sm text-gray-400 mb-2">Delivery Method</p>
+                                    <div className="flex items-center gap-3">
+                                        <span className="text-2xl">{order.deliveryMethod === 'PICKUP_FROM_STORE' ? '🏪' : '🚚'}</span>
+                                        <p className="font-medium">{order.deliveryMethod === 'PICKUP_FROM_STORE' ? 'Pick up from Store' : 'Standard Delivery'}</p>
+                                    </div>
+                                </div>
+
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                     {order.pickupAddress && (
                                         <div>
-                                            <p className="text-sm text-gray-400 mb-2">Pickup / Delivery Address</p>
+                                            <p className="text-sm text-gray-400 mb-2">Delivery Address</p>
                                             <div className="text-sm space-y-1">
+                                                {order.pickupAddress.label && <p className="text-purple-400 text-xs">{order.pickupAddress.label}</p>}
+                                                <p className="font-medium">{order.customer?.name}</p>
                                                 <p>{order.pickupAddress.street}</p>
                                                 <p>{order.pickupAddress.city}, {order.pickupAddress.state} {order.pickupAddress.postalCode}</p>
                                                 <p>{order.pickupAddress.country}</p>
                                             </div>
                                         </div>
                                     )}
-                                    {order.returnAddress && (
+                                    {order.billingAddress && !order.billingIsSame && (
                                         <div>
-                                            <p className="text-sm text-gray-400 mb-2">Return Address</p>
+                                            <p className="text-sm text-gray-400 mb-2">Billing Address</p>
                                             <div className="text-sm space-y-1">
-                                                <p>{order.returnAddress.street}</p>
-                                                <p>{order.returnAddress.city}, {order.returnAddress.state} {order.returnAddress.postalCode}</p>
-                                                <p>{order.returnAddress.country}</p>
+                                                {order.billingAddress.label && <p className="text-blue-400 text-xs">{order.billingAddress.label}</p>}
+                                                <p className="font-medium">{order.customer?.name}</p>
+                                                <p>{order.billingAddress.street}</p>
+                                                <p>{order.billingAddress.city}, {order.billingAddress.state} {order.billingAddress.postalCode}</p>
+                                                <p>{order.billingAddress.country}</p>
                                             </div>
                                         </div>
                                     )}
@@ -269,6 +296,12 @@ export default function OrderDetailsPage() {
                                     <span>Tax (18%)</span>
                                     <span>₹{Number(order.taxAmount).toLocaleString()}</span>
                                 </div>
+                                {order.discountAmount > 0 && (
+                                    <div className="flex justify-between text-green-400">
+                                        <span>Discount {order.couponCode && `(${order.couponCode})`}</span>
+                                        <span>-₹{Number(order.discountAmount).toLocaleString()}</span>
+                                    </div>
+                                )}
                                 {order.securityDeposit > 0 && (
                                     <div className="flex justify-between text-gray-400">
                                         <span>Security Deposit</span>

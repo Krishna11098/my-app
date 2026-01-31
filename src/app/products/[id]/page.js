@@ -15,6 +15,7 @@ export default function ProductDetails() {
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
     const [totalPrice, setTotalPrice] = useState(0);
+    const [error, setError] = useState()
 
     useEffect(() => {
         fetch(`/api/products/${id}`)
@@ -138,7 +139,18 @@ export default function ProductDetails() {
                                     type="datetime-local"
                                     className="w-full bg-gray-900 border border-gray-700 rounded-xl p-3 text-white outline-none focus:border-purple-500"
                                     value={startDate}
-                                    onChange={(e) => setStartDate(e.target.value)}
+                                    onChange={(e) => {
+                                        const value = e.target.value
+
+                                        if(value >= Date.now()){
+                                            setStartDate(value);
+                                        }
+                                        else{
+                                            alert("please select a valid date")
+                                        }
+                                    }
+                                }
+                                       
                                 />
                             </div>
                             <div>

@@ -15,17 +15,29 @@ export default function CheckoutPage() {
     const [error, setError] = useState('');
     const [step, setStep] = useState(1); // 1: Review, 2: Address, 3: Payment
 
+    // Delivery method
+    const [deliveryMethod, setDeliveryMethod] = useState('STANDARD_DELIVERY');
+
     // Address state
     const [addresses, setAddresses] = useState([]);
     const [selectedAddressId, setSelectedAddressId] = useState(null);
+    const [billingIsSame, setBillingIsSame] = useState(true);
+    const [billingAddressId, setBillingAddressId] = useState(null);
     const [showNewAddressForm, setShowNewAddressForm] = useState(false);
     const [newAddress, setNewAddress] = useState({
+        label: '',
         street: '',
         city: '',
         state: '',
         postalCode: '',
         country: 'India'
     });
+
+    // Coupon state
+    const [couponCode, setCouponCode] = useState('');
+    const [couponApplied, setCouponApplied] = useState(null);
+    const [couponLoading, setCouponLoading] = useState(false);
+    const [discount, setDiscount] = useState(0);
 
     useEffect(() => {
         if (!quotationId) return;
@@ -51,7 +63,7 @@ export default function CheckoutPage() {
 
     const fetchAddresses = async () => {
         try {
-            const res = await fetch('/api/auth/addresses');
+            const res = await fetch('/api/auth/addresses', { credentials: 'include' });
             if (res.ok) {
                 const data = await res.json();
                 setAddresses(data);
@@ -71,6 +83,7 @@ export default function CheckoutPage() {
             const res = await fetch('/api/auth/addresses', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
                 body: JSON.stringify(newAddress)
             });
             if (!res.ok) throw new Error('Failed to add address');
@@ -78,10 +91,44 @@ export default function CheckoutPage() {
             setAddresses([...addresses, data]);
             setSelectedAddressId(data.id);
             setShowNewAddressForm(false);
-            setNewAddress({ street: '', city: '', state: '', postalCode: '', country: 'India' });
+            setNewAddress({ label: '', street: '', city: '', state: '', postalCode: '', country: 'India' });
         } catch (err) {
             setError(err.message);
         }
+    };
+
+    const handleApplyCoupon = async () => {
+        if (!couponCode.trim()) return;
+        setCouponLoading(true);
+        try {
+            const res = await fetch('/api/coupons/validate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ code: couponCode, orderAmount: quotation.totalAmount })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Invalid coupon');
+            setCouponApplied(data);
+            setDiscount(data.discountAmount);
+        } catch (err) {
+            setError(err.message);
+            setCouponApplied(null);
+            setDiscount(0);
+        } finally {
+            setCouponLoading(false);
+        }
+    };
+
+    const removeCoupon = () => {
+        setCouponCode('');
+        setCouponApplied(null);
+        setDiscount(0);
+    };
+
+    const getFinalTotal = () => {
+        const total = Number(quotation?.totalAmount || 0);
+        return Math.max(0, total - discount);
     };
 
     const loadRazorpay = () => {
@@ -111,10 +158,12 @@ export default function CheckoutPage() {
             const loaded = await loadRazorpay();
             if (!loaded) throw new Error('Failed to load payment gateway');
 
+            const finalAmount = getFinalTotal();
             const paymentRes = await fetch('/api/payments', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ amount: quotation.totalAmount, quotationId: quotation.id })
+                credentials: 'include',
+                body: JSON.stringify({ amount: finalAmount, quotationId: quotation.id })
             });
             
             if (!paymentRes.ok) {
@@ -128,7 +177,7 @@ export default function CheckoutPage() {
                 key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
                 amount: paymentData.amount,
                 currency: paymentData.currency,
-                name: 'RentEZ',
+                name: 'Joy Juncture',
                 description: `Order for Quotation ${quotation.quotationNumber}`,
                 order_id: paymentData.razorpayOrderId,
                 handler: async function (response) {
@@ -136,10 +185,12 @@ export default function CheckoutPage() {
                         const verifyRes = await fetch('/api/payments', {
                             method: 'PUT',
                             headers: { 'Content-Type': 'application/json' },
+                            credentials: 'include',
                             body: JSON.stringify({
                                 razorpay_payment_id: response.razorpay_payment_id,
                                 razorpay_order_id: response.razorpay_order_id,
-                                razorpay_signature: response.razorpay_signature
+                                razorpay_signature: response.razorpay_signature,
+                                quotationId: quotation.id
                             })
                         });
                         if (!verifyRes.ok) throw new Error('Payment verification failed');
@@ -147,11 +198,17 @@ export default function CheckoutPage() {
                         const confirmRes = await fetch('/api/orders/confirm', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
+                            credentials: 'include',
                             body: JSON.stringify({ 
                                 quotationId, 
                                 paymentId: response.razorpay_payment_id,
                                 razorpayOrderId: response.razorpay_order_id,
-                                addressId: selectedAddressId
+                                addressId: selectedAddressId,
+                                billingAddressId: billingIsSame ? selectedAddressId : billingAddressId,
+                                billingIsSame,
+                                deliveryMethod,
+                                couponCode: couponApplied?.code || null,
+                                discountAmount: discount
                             })
                         });
                         const confirmData = await confirmRes.json();
@@ -182,7 +239,8 @@ export default function CheckoutPage() {
             const res = await fetch('/api/orders/confirm', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ quotationId })
+                credentials: 'include',
+                body: JSON.stringify({ quotationId, addressId: selectedAddressId })
             });
 
             const data = await res.json();
@@ -285,11 +343,11 @@ export default function CheckoutPage() {
                             )}
                         </div>
 
-                        {/* Step 2: Delivery Address */}
+                        {/* Step 2: Delivery Method & Address */}
                         {step >= 2 && (
                             <div className={`bg-gray-900/50 border border-gray-800 rounded-2xl p-6 ${step !== 2 && 'opacity-60'}`}>
                                 <div className="flex justify-between items-center mb-4">
-                                    <h2 className="text-xl font-bold">📍 Delivery Address</h2>
+                                    <h2 className="text-xl font-bold">🚚 Delivery Method</h2>
                                     {step > 2 && (
                                         <button onClick={() => setStep(2)} className="text-sm text-purple-400 hover:text-purple-300">Edit</button>
                                     )}
@@ -297,6 +355,46 @@ export default function CheckoutPage() {
 
                                 {step === 2 && (
                                     <>
+                                        {/* Delivery Method Selection */}
+                                        <div className="space-y-3 mb-6">
+                                            <div
+                                                onClick={() => setDeliveryMethod('STANDARD_DELIVERY')}
+                                                className={`p-4 rounded-xl cursor-pointer border-2 transition-all flex justify-between items-center ${
+                                                    deliveryMethod === 'STANDARD_DELIVERY'
+                                                        ? 'border-purple-500 bg-purple-500/10'
+                                                        : 'border-gray-700 bg-black/40 hover:border-gray-600'
+                                                }`}
+                                            >
+                                                <div className="flex items-center gap-3">
+                                                    <span className="text-2xl">🚚</span>
+                                                    <div>
+                                                        <p className="font-medium">Standard Delivery</p>
+                                                        <p className="text-sm text-gray-400">Delivered to your address</p>
+                                                    </div>
+                                                </div>
+                                                <span className="text-green-400 font-bold">Free</span>
+                                            </div>
+                                            <div
+                                                onClick={() => setDeliveryMethod('PICKUP_FROM_STORE')}
+                                                className={`p-4 rounded-xl cursor-pointer border-2 transition-all flex justify-between items-center ${
+                                                    deliveryMethod === 'PICKUP_FROM_STORE'
+                                                        ? 'border-purple-500 bg-purple-500/10'
+                                                        : 'border-gray-700 bg-black/40 hover:border-gray-600'
+                                                }`}
+                                            >
+                                                <div className="flex items-center gap-3">
+                                                    <span className="text-2xl">🏪</span>
+                                                    <div>
+                                                        <p className="font-medium">Pick up from Store</p>
+                                                        <p className="text-sm text-gray-400">Collect from vendor location</p>
+                                                    </div>
+                                                </div>
+                                                <span className="text-green-400 font-bold">Free</span>
+                                            </div>
+                                        </div>
+
+                                        {/* Delivery Address */}
+                                        <h3 className="text-lg font-semibold mb-3">📍 Delivery Address</h3>
                                         <div className="space-y-3 mb-4">
                                             {addresses.map(addr => (
                                                 <div
@@ -310,11 +408,15 @@ export default function CheckoutPage() {
                                                 >
                                                     <div className="flex items-start justify-between">
                                                         <div>
-                                                            <p className="font-medium">{addr.street}</p>
+                                                            {addr.label && <p className="text-xs text-purple-400 mb-1">{addr.label}</p>}
+                                                            <p className="font-medium">{user?.name || 'Customer'}</p>
+                                                            <p className="text-sm text-gray-400">{addr.street}</p>
                                                             <p className="text-sm text-gray-400">{addr.city}, {addr.state} {addr.postalCode}</p>
-                                                            <p className="text-sm text-gray-500">{addr.country}</p>
                                                         </div>
-                                                        {selectedAddressId === addr.id && <span className="text-purple-400">✓</span>}
+                                                        <div className="flex items-center gap-2">
+                                                            {addr.isDefault && <span className="text-xs bg-gray-700 px-2 py-1 rounded">Main Address</span>}
+                                                            {selectedAddressId === addr.id && <span className="text-purple-400">✓</span>}
+                                                        </div>
                                                     </div>
                                                 </div>
                                             ))}
@@ -329,6 +431,9 @@ export default function CheckoutPage() {
                                             </button>
                                         ) : (
                                             <form onSubmit={handleAddNewAddress} className="bg-black/40 p-4 rounded-xl space-y-4">
+                                                <input type="text" placeholder="Label (e.g., Home, Office)" value={newAddress.label}
+                                                    onChange={(e) => setNewAddress({...newAddress, label: e.target.value})}
+                                                    className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-purple-500" />
                                                 <input type="text" placeholder="Street Address" value={newAddress.street}
                                                     onChange={(e) => setNewAddress({...newAddress, street: e.target.value})} required
                                                     className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-purple-500" />
@@ -355,6 +460,40 @@ export default function CheckoutPage() {
                                                 </div>
                                             </form>
                                         )}
+
+                                        {/* Billing Address Toggle */}
+                                        <div className="mt-6 pt-6 border-t border-gray-800">
+                                            <h3 className="text-lg font-semibold mb-3">💳 Billing Address</h3>
+                                            <label className="flex items-center gap-3 cursor-pointer p-4 bg-black/40 rounded-xl">
+                                                <div className={`w-12 h-6 rounded-full relative transition-all ${billingIsSame ? 'bg-purple-600' : 'bg-gray-700'}`}>
+                                                    <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${billingIsSame ? 'left-7' : 'left-1'}`}></div>
+                                                </div>
+                                                <div>
+                                                    <p className="font-medium">Same as delivery address</p>
+                                                    <p className="text-sm text-gray-400">If enabled, billing and delivery address will be the same</p>
+                                                </div>
+                                                <input type="checkbox" checked={billingIsSame} onChange={(e) => setBillingIsSame(e.target.checked)} className="hidden" />
+                                            </label>
+
+                                            {!billingIsSame && (
+                                                <div className="mt-4 space-y-3">
+                                                    {addresses.map(addr => (
+                                                        <div
+                                                            key={addr.id}
+                                                            onClick={() => setBillingAddressId(addr.id)}
+                                                            className={`p-4 rounded-xl cursor-pointer border-2 transition-all ${
+                                                                billingAddressId === addr.id 
+                                                                    ? 'border-blue-500 bg-blue-500/10' 
+                                                                    : 'border-gray-700 bg-black/40 hover:border-gray-600'
+                                                            }`}
+                                                        >
+                                                            <p className="font-medium">{addr.street}</p>
+                                                            <p className="text-sm text-gray-400">{addr.city}, {addr.state} {addr.postalCode}</p>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
 
                                         <button
                                             onClick={() => selectedAddressId ? setStep(3) : setError('Please select or add an address')}
@@ -392,7 +531,7 @@ export default function CheckoutPage() {
                                     disabled={confirming}
                                     className="w-full py-4 rounded-xl bg-gradient-to-r from-green-600 to-emerald-600 font-bold text-lg hover:shadow-lg hover:shadow-green-500/20 transition-all disabled:opacity-50"
                                 >
-                                    {confirming ? 'Processing...' : `Pay ₹${Number(quotation.totalAmount).toLocaleString()} & Confirm Order`}
+                                    {confirming ? 'Processing...' : `Pay ₹${getFinalTotal().toLocaleString()} & Confirm Order`}
                                 </button>
                                 <p className="text-xs text-center text-gray-500 mt-4">🔒 Your payment is secured by Razorpay</p>
                             </div>
@@ -403,6 +542,37 @@ export default function CheckoutPage() {
                     <div className="lg:col-span-1">
                         <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 sticky top-24">
                             <h2 className="text-xl font-bold mb-6">Order Summary</h2>
+                            
+                            {/* Coupon Code Input */}
+                            <div className="mb-6">
+                                {!couponApplied ? (
+                                    <div className="flex gap-2">
+                                        <input
+                                            type="text"
+                                            placeholder="Coupon Code"
+                                            value={couponCode}
+                                            onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                                            className="flex-1 px-4 py-3 bg-gray-800 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-green-500 text-sm"
+                                        />
+                                        <button
+                                            onClick={handleApplyCoupon}
+                                            disabled={couponLoading || !couponCode.trim()}
+                                            className="px-4 py-3 bg-green-600 rounded-xl font-bold text-sm hover:bg-green-500 transition-all disabled:opacity-50"
+                                        >
+                                            {couponLoading ? '...' : 'Apply'}
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-3 flex justify-between items-center">
+                                        <div>
+                                            <p className="text-green-400 font-medium text-sm">🎉 {couponApplied.code} applied!</p>
+                                            <p className="text-xs text-gray-400">You save ₹{discount.toLocaleString()}</p>
+                                        </div>
+                                        <button onClick={removeCoupon} className="text-red-400 hover:text-red-300 text-sm">✕</button>
+                                    </div>
+                                )}
+                            </div>
+
                             <div className="space-y-3 mb-6">
                                 <div className="flex justify-between text-gray-400">
                                     <span>Subtotal</span>
@@ -412,10 +582,20 @@ export default function CheckoutPage() {
                                     <span>Tax (18%)</span>
                                     <span>₹{Number(quotation.taxAmount).toLocaleString()}</span>
                                 </div>
+                                <div className="flex justify-between text-gray-400">
+                                    <span>Delivery</span>
+                                    <span className="text-green-400">Free</span>
+                                </div>
+                                {discount > 0 && (
+                                    <div className="flex justify-between text-green-400">
+                                        <span>Discount</span>
+                                        <span>-₹{discount.toLocaleString()}</span>
+                                    </div>
+                                )}
                                 <div className="h-px bg-gray-700 my-2"></div>
                                 <div className="flex justify-between text-2xl font-bold text-white">
                                     <span>Total</span>
-                                    <span>₹{Number(quotation.totalAmount).toLocaleString()}</span>
+                                    <span>₹{getFinalTotal().toLocaleString()}</span>
                                 </div>
                             </div>
                             <div className="pt-4 border-t border-gray-800">

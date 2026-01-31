@@ -101,7 +101,7 @@ export async function POST(req) {
             });
         }
 
-        // Add/Update Line
+        // Add/Update Line with per-item rental dates
         const existingLine = quotation.lines.find(l => l.productId === productId && l.type === type);
 
         if (existingLine) {
@@ -110,7 +110,6 @@ export async function POST(req) {
                 await prisma.quotationLine.delete({ where: { id: existingLine.id } });
             } else {
                 // Recalculate line total for existing line with potentially new duration
-                // We re-calculate unitPrice just in case, but using `unitPrice` logic above
                 const newLineTotal = type === 'SALE'
                     ? newQty * unitPrice
                     : newQty * unitPrice * duration;
@@ -119,7 +118,9 @@ export async function POST(req) {
                     where: { id: existingLine.id },
                     data: {
                         quantity: newQty,
-                        lineTotal: newLineTotal
+                        lineTotal: newLineTotal,
+                        rentalStart: type !== 'SALE' ? start : null,
+                        rentalEnd: type !== 'SALE' ? end : null
                     }
                 });
             }
@@ -132,7 +133,9 @@ export async function POST(req) {
                     quantity,
                     type,
                     unitPrice,
-                    lineTotal
+                    lineTotal,
+                    rentalStart: type !== 'SALE' ? start : null,
+                    rentalEnd: type !== 'SALE' ? end : null
                 }
             });
         }

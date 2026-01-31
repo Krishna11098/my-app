@@ -43,7 +43,7 @@ export default function VendorInvoices() {
                                     <td className="p-4 font-mono text-sm text-purple-400">{inv.invoiceNumber}</td>
                                     <td className="p-4 text-sm text-gray-300">{new Date(inv.issueDate).toLocaleDateString()}</td>
                                     <td className="p-4">{inv.customer?.name}</td>
-                                    <td className="p-4 font-bold">₹{inv.totalAmount}</td>
+                                    <td className="p-4 font-bold">₹{Number(inv.totalAmount).toLocaleString()}</td>
                                     <td className="p-4">
                                         <span className={`px-2 py-1 rounded text-xs font-bold ${inv.status === 'PAID' ? 'bg-green-500/10 text-green-400' :
                                                 inv.status === 'DRAFT' ? 'bg-gray-500/10 text-gray-400' :
@@ -53,7 +53,12 @@ export default function VendorInvoices() {
                                         </span>
                                     </td>
                                     <td className="p-4">
-                                        <button className="text-xs bg-gray-800 hover:bg-gray-700 px-3 py-1 rounded transition-colors">Download</button>
+                                        <button 
+                                            onClick={() => window.open(`/api/orders/${inv.orderId}/invoice`, '_blank')}
+                                            className="text-xs bg-purple-600 hover:bg-purple-500 px-3 py-1 rounded transition-colors"
+                                        >
+                                            📄 View Invoice
+                                        </button>
                                     </td>
                                 </tr>
                             ))}

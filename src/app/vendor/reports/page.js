@@ -2,8 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
 
 export default function Reports() {
     const [stats, setStats] = useState(null);
@@ -16,7 +14,7 @@ export default function Reports() {
             query = `?startDate=${dateRange.start}&endDate=${dateRange.end}`;
         }
 
-        fetch(`/api/vendor/stats${query}`)
+        fetch(`/api/vendor/stats${query}`, { credentials: 'include' })
             .then(res => res.json())
             .then(data => {
                 setStats(data);
@@ -24,62 +22,66 @@ export default function Reports() {
             });
     }, [dateRange.start, dateRange.end]);
 
-    const handleExport = (format) => {
-        // Generate REAL data for export
-        // Since we don't have a dedicated report line-item API, we'll mock granular data based on aggregates or use what we have.
-        // For a hackathon, let's create a report of "Recent Orders" logic or simulated granular list matching the total revenue.
+    const handleExport = async (format) => {
+        try {
+            const res = await fetch('/api/vendor/orders', { credentials: 'include' });
+            const orders = await res.json();
 
-        // Simulate fetching report data (or use a new API endpoint if strict)
-        // Let's use the stats we have and maybe fetch orders list for detailed report.
-        // For now, I'll fetch orders to generate a real report.
+            if (format === 'PDF') {
+                // Dynamic import for jsPDF and autoTable
+                const { default: jsPDF } = await import('jspdf');
+                const { default: autoTable } = await import('jspdf-autotable');
 
-        fetch('/api/vendor/orders')
-            .then(res => res.json())
-            .then(orders => {
-                if (format === 'PDF') {
-                    const doc = new jsPDF();
-                    doc.setFontSize(18);
-                    doc.text('Vendor Sales Report', 14, 22);
-                    doc.setFontSize(11);
-                    doc.text(`Generated: ${new Date().toLocaleDateString()}`, 14, 30);
+                const doc = new jsPDF();
+                doc.setFontSize(18);
+                doc.text('Vendor Sales Report', 14, 22);
+                doc.setFontSize(11);
+                doc.text(`Generated: ${new Date().toLocaleDateString()}`, 14, 30);
 
-                    // Table
-                    const tableColumn = ["Order ID", "Date", "Customer", "Status", "Amount"];
-                    const tableRows = [];
+                // Summary stats
+                doc.setFontSize(10);
+                doc.text(`Total Revenue: Rs. ${stats?.revenue?.toLocaleString() || 0}`, 14, 40);
+                doc.text(`Orders Processed: ${stats?.ordersProcessed || 0}`, 14, 46);
+                doc.text(`Avg. Order Value: Rs. ${Math.round(stats?.avgOrderValue || 0).toLocaleString()}`, 14, 52);
 
-                    orders.forEach(order => {
-                        const orderData = [
-                            order.quotationNumber || order.id,
-                            new Date(order.createdAt).toLocaleDateString(),
-                            order.customer?.name || 'N/A',
-                            order.status,
-                            `Rs. ${order.totalAmount}`
-                        ];
-                        tableRows.push(orderData);
-                    });
+                // Table
+                const tableColumn = ["Order #", "Date", "Customer", "Status", "Amount"];
+                const tableRows = orders.map(order => [
+                    order.orderNumber || order.id?.slice(-8) || 'N/A',
+                    new Date(order.createdAt).toLocaleDateString(),
+                    order.customer?.name || 'N/A',
+                    order.status,
+                    `Rs. ${Number(order.totalAmount).toLocaleString()}`
+                ]);
 
-                    doc.autoTable({
-                        head: [tableColumn],
-                        body: tableRows,
-                        startY: 40
-                    });
-                    doc.save('vendor_report.pdf');
-                } else {
-                    // CSV
-                    let csvContent = "data:text/csv;charset=utf-8,Order ID,Date,Customer,Status,Amount\n";
-                    orders.forEach(order => {
-                        const row = `${order.quotationNumber},${new Date(order.createdAt).toLocaleDateString()},${order.customer?.name || 'N/A'},${order.status},${order.totalAmount}`;
-                        csvContent += row + "\n";
-                    });
-                    const encodedUri = encodeURI(csvContent);
-                    const link = document.createElement("a");
-                    link.setAttribute("href", encodedUri);
-                    link.setAttribute("download", "vendor_report.csv");
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                }
-            });
+                autoTable(doc, {
+                    head: [tableColumn],
+                    body: tableRows,
+                    startY: 60,
+                    theme: 'striped',
+                    headStyles: { fillColor: [124, 58, 237] }
+                });
+
+                doc.save('vendor_report.pdf');
+            } else {
+                // CSV
+                let csvContent = "data:text/csv;charset=utf-8,Order Number,Date,Customer,Status,Amount\n";
+                orders.forEach(order => {
+                    const row = `${order.orderNumber || order.id},${new Date(order.createdAt).toLocaleDateString()},${order.customer?.name || 'N/A'},${order.status},${order.totalAmount}`;
+                    csvContent += row + "\n";
+                });
+                const encodedUri = encodeURI(csvContent);
+                const link = document.createElement("a");
+                link.setAttribute("href", encodedUri);
+                link.setAttribute("download", "vendor_report.csv");
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            }
+        } catch (err) {
+            console.error('Export error:', err);
+            alert('Failed to export: ' + err.message);
+        }
     };
 
     if (loading) return <div className="min-h-screen bg-black text-white p-8">Loading reports...</div>;
