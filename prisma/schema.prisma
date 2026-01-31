@@ -1,0 +1,580 @@
+// schema.prisma
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+
+// ====================
+// ENUMS
+// ====================
+
+enum UserRole {
+  CUSTOMER
+  VENDOR
+  ADMIN
+}
+
+enum RentalPeriodUnit {
+  HOUR
+  DAY
+  WEEK
+  CUSTOM
+}
+
+enum OrderStatus {
+  DRAFT
+  SENT
+  CONFIRMED
+  PICKED_UP
+  RETURNED
+  CANCELLED
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PAID
+  PARTIALLY_PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum PaymentMethod {
+  CARD
+  UPI
+  NET_BANKING
+  CASH
+}
+
+enum PickupStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+}
+
+enum ReturnStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  REFUNDED
+}
+
+enum NotificationType {
+  RETURN_REMINDER
+  PAYMENT_CONFIRMED
+  ORDER_CONFIRMED
+  PICKUP_READY
+  RETURN_COMPLETE
+  OVERDUE_ALERT
+  SYSTEM_ALERT
+  GENERAL
+}
+
+enum StockMovementType {
+  RESERVE
+  PICKUP
+  RETURN
+  ADJUSTMENT
+  DAMAGE
+  LOSS
+  CORRECTION
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  STATUS_CHANGE
+  LOGIN
+  LOGOUT
+  PAYMENT
+  CONFIG_CHANGE
+}
+
+// ====================
+// MODELS
+// ====================
+
+model User {
+  id            String       @id @default(cuid())
+  email         String       @unique
+  passwordHash  String
+  name          String
+  companyName   String?
+  gstin         String?      // Mandatory for invoicing
+  role          UserRole @default(CUSTOMER)     
+  isActive      Boolean      @default(true)
+  couponUsedAtSignup String?
+  resetToken    String?
+  resetExpiry   DateTime?
+  deletedAt     DateTime?    // Soft delete
+
+  // Relations
+  addresses     Address[]
+  quotations    Quotation[]
+  orders        RentalOrder[]
+  invoices      Invoice[]
+  notifications Notification[]
+  reports       Report[]
+  auditLogs     AuditLog[]
+  configUpdates SystemConfig[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([email])
+  @@index([gstin])
+
+}
+
+model RateLimitViolation {
+  id          String   @id @default(cuid())
+  identifier  String   // userId / IP / sessionId
+  type        String   // LOGIN, PAYMENT, API, GAME
+  limitRule   String   // "5req/5min"
+  endpoint    String
+  userId      String?
+  ipAddress   String
+
+  user        User?    @relation(fields: [userId], references: [id])
+
+  createdAt   DateTime @default(now())
+
+  @@index([identifier])
+  @@index([type])
+  @@index([createdAt])
+}
+
+
+model Address {
+  id          String   @id @default(cuid())
+  userId      String
+  street      String
+  city        String
+  state       String
+  postalCode  String
+  country     String   @default("India")
+  isDefault   Boolean  @default(false)
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Session {
+  id            String   @id @default(cuid())
+  userId        String?
+  sessionToken  String   @unique
+  isGuest       Boolean  @default(true)
+  ipAddress     String?
+  userAgent     String?
+  expiresAt     DateTime
+
+  user          User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model AnalyticsDailyAggregate {
+  id            String   @id @default(cuid())
+  date          DateTime
+  metric        String   // TOTAL_REVENUE, ORDERS, SIGNUPS
+  value         Decimal
+
+  @@unique([date, metric])
+}
+
+model AnalyticsEvent {
+  id          String   @id @default(cuid())
+  eventType   String   // PAGE_VIEW, ADD_TO_CART, CHECKOUT
+  userId      String?
+  sessionId   String?
+  entityType  String?  // PRODUCT, ORDER
+  entityId    String?
+  metadata    Json?
+
+  user        User?    @relation(fields: [userId], references: [id])
+
+  createdAt   DateTime @default(now())
+
+  @@index([eventType])
+  @@index([createdAt])
+}
+
+
+model Product {
+  id               String         @id @default(cuid())
+  name             String
+  description      String?
+  sku              String         @unique
+  isRentable       Boolean        @default(true)
+  isPublished      Boolean        @default(false)
+  costPrice        Decimal
+  salePrice        Decimal
+  quantityOnHand   Int
+  minRentalPeriod  Int            // in hours
+  maxRentalPeriod  Int            // in hours
+  attributes       Json?          // e.g., {"brand": "Bosch", "color": "Red"}
+  imageUrls        String[]
+  deletedAt        DateTime?      // Soft delete
+
+  // Relations
+  variants         ProductVariant[]
+  quotations       QuotationLine[]
+  orderLines       OrderLine[]
+  reservations     Reservation[]
+  pickupItems      PickupItem[]
+  returnItems      ReturnItem[]
+  priceConfigs     PriceConfig[]
+  stockMovements   StockMovement[]
+
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@index([sku, isRentable, isPublished])
+}
+
+model ProductVariant {
+  id          String    @id @default(cuid())
+  productId   String
+  name        String    // e.g., "Large", "Red"
+  skuSuffix   String    // e.g., "-L", "-RED"
+  priceAdjustment Decimal // e.g., +100, -50
+  quantityOnHand Int
+
+  product     Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, name])
+  @@index([productId])
+}
+
+model PriceConfig {
+  id                String           @id @default(cuid())
+  productId         String
+  periodUnit        RentalPeriodUnit
+  duration          Int              // e.g., 1 hour, 7 days
+  price             Decimal
+  isActive          Boolean          @default(true)
+
+  product           Product          @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, periodUnit, duration])
+  @@index([productId])
+}
+
+model Quotation {
+  id              String          @id @default(cuid())
+  customerId      String
+  quotationNumber String          @unique
+  status          OrderStatus     @default(DRAFT)
+  subtotal        Decimal
+  taxAmount       Decimal
+  totalAmount     Decimal
+  rentalStart     DateTime
+  rentalEnd       DateTime
+  notes           String?
+
+  // Relations
+  customer        User            @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  lines           QuotationLine[]
+  order           RentalOrder?
+  invoice         Invoice?
+
+  createdAt       DateTime        @default(now())
+  expiresAt       DateTime        // auto-set based on business rule
+
+  @@index([customerId, status, quotationNumber])
+}
+
+model QuotationLine {
+  id           String    @id @default(cuid())
+  quotationId  String
+  productId    String
+  variantId    String?
+  quantity     Int
+  unitPrice    Decimal
+  lineTotal    Decimal
+
+  quotation    Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  product      Product   @relation(fields: [productId], references: [id])
+  variant      ProductVariant? @relation(fields: [variantId], references: [id])
+
+  @@index([quotationId, productId])
+}
+
+model RentalOrder {
+  id              String          @id @default(cuid())
+  customerId      String
+  quotationId     String?         @unique
+  orderNumber     String          @unique
+  status          OrderStatus     @default(CONFIRMED)
+  subtotal        Decimal
+  taxAmount       Decimal
+  totalAmount     Decimal
+  securityDeposit Decimal
+  amountPaid      Decimal         @default(0)
+  rentalStart     DateTime
+  rentalEnd       DateTime
+  pickupAddressId String
+  returnAddressId String?
+
+  // Relations
+  customer        User            @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  quotation       Quotation?      @relation(fields: [quotationId], references: [id])
+  pickupAddress   Address         @relation("OrderPickupAddress", fields: [pickupAddressId], references: [id])
+  returnAddress   Address?        @relation("OrderReturnAddress", fields: [returnAddressId], references: [id])
+  lines           OrderLine[]
+  invoice         Invoice?
+  pickup          Pickup?
+  return          Return?
+  payments        Payment[]
+  reservations    Reservation[]
+
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([customerId, status, orderNumber])
+}
+
+model OrderLine {
+  id          String    @id @default(cuid())
+  orderId     String
+  productId   String
+  variantId   String?
+  quantity    Int
+  unitPrice   Decimal
+  lineTotal   Decimal
+
+  order       RentalOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product     Product     @relation(fields: [productId], references: [id])
+  variant     ProductVariant? @relation(fields: [variantId], references: [id])
+
+  @@index([orderId, productId])
+}
+
+model Reservation {
+  id        String      @id @default(cuid())
+  productId String
+  orderId   String
+  quantity  Int
+  fromDate  DateTime
+  toDate    DateTime
+
+  product   Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  order     RentalOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, fromDate, toDate])
+  @@index([productId, orderId])
+}
+
+model Pickup {
+  id              String      @id @default(cuid())
+  orderId         String      @unique
+  pickupNumber    String      @unique
+  pickupDate      DateTime
+  instructions    String?
+  status          PickupStatus @default(PENDING)
+
+  order           RentalOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  items           PickupItem[]
+
+  createdAt       DateTime    @default(now())
+}
+
+model PickupItem {
+  id        String  @id @default(cuid())
+  pickupId  String
+  productId String
+  quantity  Int
+
+  pickup    Pickup  @relation(fields: [pickupId], references: [id], onDelete: Cascade)
+  product   Product @relation(fields: [productId], references: [id])
+
+  @@index([pickupId, productId])
+}
+
+model Return {
+  id              String      @id @default(cuid())
+  orderId         String      @unique
+  returnNumber    String      @unique
+  returnDate      DateTime
+  lateDays        Int         @default(0)
+  lateFee         Decimal     @default(0)
+  damageFee       Decimal     @default(0)
+  status          ReturnStatus @default(PENDING)
+
+  order           RentalOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  items           ReturnItem[]
+
+  createdAt       DateTime    @default(now())
+}
+
+model ReturnItem {
+  id        String  @id @default(cuid())
+  returnId  String
+  productId String
+  quantity  Int
+  condition String  // e.g., GOOD, DAMAGED
+
+  return    Return  @relation(fields: [returnId], references: [id], onDelete: Cascade)
+  product   Product @relation(fields: [productId], references: [id])
+
+  @@index([returnId, productId])
+}
+
+model StockMovement {
+  id              String              @id @default(cuid())
+  productId       String
+  variantId       String?
+  quantity        Int                 // Positive = add to stock, Negative = remove from stock
+  movementType    StockMovementType
+  referenceId     String?             // orderId, pickupId, returnId, adjustmentId
+  referenceType   String?             // ORDER, PICKUP, RETURN, ADJUSTMENT
+  remarks         String?
+  
+  // Relations
+  product         Product             @relation(fields: [productId], references: [id])
+  variant         ProductVariant?     @relation(fields: [variantId], references: [id])
+  
+  createdAt       DateTime            @default(now())
+  
+  @@index([productId])
+  @@index([movementType])
+  @@index([referenceId])
+}
+
+model Invoice {
+  id              String          @id @default(cuid())
+  invoiceNumber   String          @unique
+  orderId         String?         @unique
+  quotationId     String?         @unique
+  customerId      String
+  status          InvoiceStatus   @default(DRAFT)
+  issueDate       DateTime
+  dueDate         DateTime
+  subtotal        Decimal
+  taxAmount       Decimal
+  totalAmount     Decimal
+  amountPaid      Decimal         @default(0)
+  securityDeposit Decimal
+  notes           String?
+  pdfUrl          String?
+
+  // Relations
+  customer        User            @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  order           RentalOrder?    @relation(fields: [orderId], references: [id])
+  quotation       Quotation?      @relation(fields: [quotationId], references: [id])
+  payments        Payment[]
+
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([customerId, status, invoiceNumber])
+}
+
+model Payment {
+  id            String        @id @default(cuid())
+  invoiceId     String?
+  orderId       String?
+  paymentNumber String        @unique
+  amount        Decimal
+  method        PaymentMethod
+  transactionId String?
+  status        PaymentStatus @default(PENDING)
+  paidAt        DateTime?
+
+  invoice       Invoice?      @relation(fields: [invoiceId], references: [id])
+  order         RentalOrder?  @relation(fields: [orderId], references: [id])
+
+  createdAt     DateTime      @default(now())
+
+  @@index([invoiceId, orderId, status])
+}
+
+model Notification {
+  id          String            @id @default(cuid())
+  userId      String
+  title       String
+  message     String
+  type        NotificationType
+  isRead      Boolean           @default(false)
+  metadata    Json?             // e.g., {orderId: "...", dueDate: "..."}
+
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt   DateTime          @default(now())
+
+  @@index([userId, isRead, type])
+}
+
+model Report {
+  id          String   @id @default(cuid())
+  generatedBy String   // userId
+  title       String
+  type        String   // e.g., REVENUE, PRODUCT_PERFORMANCE
+  format      String   // PDF, XLSX, CSV
+  url         String
+  filters     Json?    // {startDate, endDate, vendorId, ...}
+
+  user        User     @relation(fields: [generatedBy], references: [id], onDelete: Cascade)
+
+  createdAt   DateTime @default(now())
+
+  @@index([generatedBy, type])
+}
+
+model AuditLog {
+  id              String      @id @default(cuid())
+  userId          String?
+  userEmail       String?     // Store email for deleted users
+  userRole        UserRole?
+  action          AuditAction
+  entity          String      // e.g., "PRODUCT", "ORDER", "INVOICE", "USER"
+  entityId        String
+  fieldChanged    String?     // Which field was modified
+  oldValue        Json?
+  newValue        Json?
+  ipAddress       String?
+  userAgent       String?
+  metadata        Json?       // Additional context
+  
+  // Optional relation (user might be deleted)
+  user            User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  
+  createdAt       DateTime    @default(now())
+  
+  @@index([userId])
+  @@index([entity, entityId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+model SystemConfig {
+  id                String    @id @default(cuid())
+  key               String    @unique
+  value             String
+  dataType          String    @default("STRING") // STRING, NUMBER, BOOLEAN, JSON
+  category          String    @default("GENERAL") // RENTAL, PAYMENT, TAX, NOTIFICATION
+  description       String?
+  isPublic          Boolean   @default(false) // Can vendors see this?
+  updatedBy         String    // admin userId
+  
+  updatedAt         DateTime  @updatedAt
+  
+  @@index([key])
+  @@index([category])
+}
