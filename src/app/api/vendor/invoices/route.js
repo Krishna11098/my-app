@@ -1,16 +1,43 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { cookies } from 'next/headers';
+import jwt from 'jsonwebtoken';
+
+async function getVendorFromToken() {
+    const cookieStore = await cookies();
+    const token = cookieStore.get('token')?.value;
+    if (!token) return null;
+
+    try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const user = await prisma.user.findUnique({
+            where: { id: decoded.userId },
+            select: { id: true, role: true }
+        });
+        if (!user || user.role !== 'VENDOR') return null;
+        return user;
+    } catch {
+        return null;
+    }
+}
 
 export async function GET(req) {
     try {
-        // In a real app, filter by vendor's orders. 
-        // Here we fetch all or link via Order -> Product -> Vendor. 
-        // For Hackathon/MVP, fetching all invoices is acceptable or we mock user context filter.
+        const vendor = await getVendorFromToken();
+        if (!vendor) {
+            return NextResponse.json({ error: 'Unauthorized - Vendor only' }, { status: 401 });
+        }
 
         const invoices = await prisma.invoice.findMany({
+            where: {
+                vendorId: vendor.id
+            },
             include: {
                 customer: {
                     select: { name: true, email: true }
+                },
+                order: {
+                    select: { orderNumber: true }
                 }
             },
             orderBy: { issueDate: 'desc' }

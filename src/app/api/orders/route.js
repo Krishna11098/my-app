@@ -11,32 +11,49 @@ export async function GET(req) {
         const user = await prisma.user.findUnique({ where: { email } });
         if (!user) return NextResponse.json([], { status: 404 });
 
-        // Fetch Quotations (Customers see these)
+        // Fetch Quotations
         const quotations = await prisma.quotation.findMany({
             where: { customerId: user.id },
             orderBy: { createdAt: 'desc' },
             include: {
                 lines: { include: { product: true } },
-                order: true // Include linked confirmed order
+                orders: {
+                    include: { lines: { include: { product: true } } }
+                }
             }
         });
 
-        // Map to a friendlier structure if needed, or just return.
-        // If order exists, use order status.
-        const orders = quotations.map(q => ({
-            id: q.order ? q.order.id : q.id,
-            isOrder: !!q.order,
-            referenceNumber: q.order ? q.order.orderNumber : q.quotationNumber,
-            status: q.order ? q.order.status : q.status,
-            totalAmount: q.totalAmount,
-            rentalStart: q.rentalStart,
-            rentalEnd: q.rentalEnd,
-            items: q.lines.map(l => ({ name: l.product.name, qty: l.quantity })),
-            rawStatus: q.status // Keep original
-        }));
+        // Map to flat list of orders/quotations
+        const orders = quotations.flatMap(q => {
+            if (q.orders && q.orders.length > 0) {
+                return q.orders.map(o => ({
+                    id: o.id,
+                    isOrder: true,
+                    referenceNumber: o.orderNumber,
+                    status: o.status,
+                    totalAmount: o.totalAmount,
+                    rentalStart: o.rentalStart,
+                    rentalEnd: o.rentalEnd,
+                    items: o.lines.map(l => ({ name: l.product?.name || 'Item', qty: l.quantity })),
+                    rawStatus: q.status
+                }));
+            }
+            return [{
+                id: q.id,
+                isOrder: false,
+                referenceNumber: q.quotationNumber,
+                status: q.status,
+                totalAmount: q.totalAmount,
+                rentalStart: q.rentalStart,
+                rentalEnd: q.rentalEnd,
+                items: q.lines.map(l => ({ name: l.product?.name || 'Item', qty: l.quantity })),
+                rawStatus: q.status
+            }];
+        });
 
         return NextResponse.json(orders);
     } catch (error) {
+        console.error("DEBUG: Orders API Error:", error);
         return NextResponse.json({ error: 'Error' }, { status: 500 });
     }
 }

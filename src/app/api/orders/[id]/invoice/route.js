@@ -5,20 +5,14 @@ export async function GET(req, { params }) {
     try {
         const { id } = await params;
 
-        const order = await prisma.rentalOrder.findUnique({
+        let order = await prisma.rentalOrder.findUnique({
             where: { id },
             include: {
                 lines: { include: { product: true } },
                 customer: true,
                 vendor: {
-                    select: { 
-                        id: true, 
-                        name: true, 
-                        companyName: true, 
-                        companyLogo: true, 
-                        gstin: true,
-                        email: true,
-                        phone: true
+                    select: {
+                        id: true, name: true, companyName: true, companyLogo: true, gstin: true, email: true, phone: true
                     }
                 },
                 invoice: true,
@@ -26,8 +20,43 @@ export async function GET(req, { params }) {
             }
         });
 
+        // Fallback to Quotation if order not found (for confirmed quotations without orders)
         if (!order) {
-            return NextResponse.json({ error: 'Order not found' }, { status: 404 });
+            const quotation = await prisma.quotation.findUnique({
+                where: { id },
+                include: {
+                    lines: { include: { product: true } },
+                    customer: true,
+                    invoice: true
+                }
+            });
+
+            if (!quotation) {
+                return NextResponse.json({ error: 'Order or Quotation not found' }, { status: 404 });
+            }
+
+            // Map quotation to a mock order structure for the generator
+            order = {
+                id: quotation.id,
+                _isFallback: true, // Mark as fallback to Quotation
+                customerId: quotation.customerId,
+                orderNumber: quotation.quotationNumber,
+                status: quotation.status === 'CONFIRMED' ? 'CONFIRMED' : quotation.status,
+                subtotal: quotation.subtotal,
+                taxAmount: quotation.taxAmount,
+                totalAmount: quotation.totalAmount,
+                amountPaid: quotation.totalAmount, // Assume paid if confirmed quotation
+                securityDeposit: 0,
+                rentalStart: quotation.rentalStart,
+                rentalEnd: quotation.rentalEnd,
+                lines: quotation.lines,
+                customer: quotation.customer,
+                invoice: quotation.invoice,
+                vendor: quotation.lines[0]?.product?.vendorId ? await prisma.user.findUnique({
+                    where: { id: quotation.lines[0].product.vendorId },
+                    select: { id: true, name: true, companyName: true, companyLogo: true, gstin: true, email: true, phone: true }
+                }) : null
+            };
         }
 
         // Get or create invoice
@@ -36,9 +65,10 @@ export async function GET(req, { params }) {
             const invCount = await prisma.invoice.count();
             invoice = await prisma.invoice.create({
                 data: {
-                    orderId: order.id,
+                    orderId: order._isFallback ? null : order.id,
+                    quotationId: order._isFallback ? order.id : (order.quotationId || null),
                     customerId: order.customerId,
-                    vendorId: order.vendorId, // Link to vendor
+                    vendorId: order.vendorId || order.vendor?.id || null, // Link to vendor
                     invoiceNumber: `INV-${new Date().getFullYear()}-${(invCount + 1).toString().padStart(4, '0')}`,
                     status: order.amountPaid >= order.totalAmount ? 'PAID' : order.amountPaid > 0 ? 'PARTIAL' : 'DRAFT',
                     issueDate: new Date(),
@@ -71,7 +101,7 @@ function generateInvoiceHTML(order, invoice) {
     const vendor = order.vendor;
     const vendorName = vendor?.companyName || vendor?.name || 'JOY JUNCTURE';
     const vendorLogo = vendor?.companyLogo;
-    
+
     return `
 <!DOCTYPE html>
 <html lang="en">
@@ -190,10 +220,10 @@ function generateInvoiceHTML(order, invoice) {
             </thead>
             <tbody>
                 ${order.lines.map(line => {
-                    const lineStart = line.rentalStart || order.rentalStart;
-                    const lineEnd = line.rentalEnd || order.rentalEnd;
-                    const lineDays = Math.ceil((new Date(lineEnd) - new Date(lineStart)) / (1000 * 60 * 60 * 24));
-                    return `
+        const lineStart = line.rentalStart || order.rentalStart;
+        const lineEnd = line.rentalEnd || order.rentalEnd;
+        const lineDays = Math.ceil((new Date(lineEnd) - new Date(lineStart)) / (1000 * 60 * 60 * 24));
+        return `
                     <tr>
                         <td class="item-name">${line.product.name}</td>
                         <td><span class="item-type ${line.type === 'SALE' ? 'type-sale' : 'type-rental'}">${line.type === 'SALE' ? 'Purchase' : 'Rental'}</span></td>

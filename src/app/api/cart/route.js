@@ -140,13 +140,15 @@ export async function POST(req) {
             });
         }
 
-        // Recalculate Totals
+        // Recalculate Totals with 18% tax
         const lines = await prisma.quotationLine.findMany({ where: { quotationId: quotation.id } });
         const sub = lines.reduce((acc, l) => acc + Number(l.lineTotal), 0);
+        const tax = Math.round(sub * 0.18);
+        const total = sub + tax;
 
         await prisma.quotation.update({
             where: { id: quotation.id },
-            data: { subtotal: sub, totalAmount: sub }
+            data: { subtotal: sub, taxAmount: tax, totalAmount: total }
         });
 
         return NextResponse.json({ success: true });

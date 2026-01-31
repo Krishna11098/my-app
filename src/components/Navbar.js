@@ -10,6 +10,11 @@ export default function Navbar() {
     const { user, logout } = useAuth();
     const pathname = usePathname();
 
+    // Don't show Navbar on homepage - it has its own navigation
+    if (pathname === '/') {
+        return null;
+    }
+
     const isVendor = user?.role === 'VENDOR';
 
     if (!user) {

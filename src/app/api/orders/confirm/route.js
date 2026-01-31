@@ -4,10 +4,10 @@ import { sendOrderConfirmationEmail } from '@/lib/email';
 
 export async function POST(req) {
     try {
-        const { 
-            quotationId, 
-            paymentId, 
-            razorpayOrderId, 
+        const {
+            quotationId,
+            paymentId,
+            razorpayOrderId,
             addressId,
             billingAddressId,
             billingIsSame = true,
@@ -19,20 +19,20 @@ export async function POST(req) {
         // 1. Fetch Quotation with product vendor info
         const quotation = await prisma.quotation.findUnique({
             where: { id: quotationId },
-            include: { 
-                lines: { 
-                    include: { 
+            include: {
+                lines: {
+                    include: {
                         product: {
                             include: {
                                 vendor: {
                                     select: { id: true, name: true, companyName: true }
                                 }
                             }
-                        } 
-                    } 
-                }, 
-                order: true, 
-                customer: true 
+                        }
+                    }
+                },
+                order: true,
+                customer: true
             }
         });
 
@@ -88,7 +88,7 @@ export async function POST(req) {
         const result = await prisma.$transaction(async (tx) => {
             // Get or create pickup address
             let userAddrId = addressId;
-            
+
             if (!userAddrId) {
                 let userAddr = await tx.address.findFirst({ where: { userId: quotation.customerId } });
                 if (!userAddr) {
@@ -109,7 +109,7 @@ export async function POST(req) {
             const createdOrders = [];
 
             // Calculate per-vendor discount allocation (proportional)
-            const totalQuotationAmount = vendorGroups.reduce((sum, g) => 
+            const totalQuotationAmount = vendorGroups.reduce((sum, g) =>
                 sum + g.lines.reduce((s, l) => s + parseFloat(l.lineTotal), 0), 0);
 
             // Create separate order for each vendor
@@ -117,7 +117,7 @@ export async function POST(req) {
                 // Calculate totals for this vendor's items
                 const vendorSubtotal = group.lines.reduce((sum, l) => sum + parseFloat(l.lineTotal), 0);
                 const vendorTax = vendorSubtotal * 0.18; // 18% GST
-                
+
                 // Proportional discount allocation
                 const vendorDiscountRatio = totalQuotationAmount > 0 ? vendorSubtotal / totalQuotationAmount : 0;
                 const vendorDiscount = discountAmount * vendorDiscountRatio;
@@ -131,7 +131,7 @@ export async function POST(req) {
                     data: {
                         customerId: quotation.customerId,
                         vendorId: group.vendorId, // Link to specific vendor
-                        quotationId: isSingleVendor ? quotation.id : null, // Only link quotation if single vendor
+                        quotationId: quotation.id,
                         orderNumber,
                         status: 'CONFIRMED',
                         subtotal: vendorSubtotal,
@@ -293,8 +293,8 @@ export async function POST(req) {
             try {
                 const completeOrder = await prisma.rentalOrder.findUnique({
                     where: { id: order.id },
-                    include: { 
-                        lines: { include: { product: true } }, 
+                    include: {
+                        lines: { include: { product: true } },
                         customer: true,
                         vendor: { select: { companyName: true, name: true } }
                     }
@@ -306,13 +306,13 @@ export async function POST(req) {
         }
 
         // Return first order id for redirect, or all if multiple
-        return NextResponse.json({ 
-            success: true, 
+        return NextResponse.json({
+            success: true,
             orderId: result[0]?.id,
             orderIds: result.map(o => o.id),
             orderCount: result.length,
-            message: result.length > 1 
-                ? `Order split into ${result.length} orders for different vendors` 
+            message: result.length > 1
+                ? `Order split into ${result.length} orders for different vendors`
                 : 'Order confirmed successfully'
         });
     } catch (error) {

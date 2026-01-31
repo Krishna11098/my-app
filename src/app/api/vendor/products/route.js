@@ -14,7 +14,7 @@ async function getVendorFromToken() {
         // Verify user is a vendor
         const user = await prisma.user.findUnique({
             where: { id: decoded.userId },
-            select: { id: true, role: true }
+            select: { id: true, role: true, category: true, customCategory: true }
         });
         if (!user || user.role !== 'VENDOR') return null;
         return user;
@@ -54,6 +54,11 @@ export async function POST(req) {
             return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
         }
 
+        // Use vendor's category (from signup) - if "Other", use customCategory
+        const productCategory = vendor.category === 'Other' 
+            ? vendor.customCategory 
+            : vendor.category;
+
         // Create Product with vendorId
         const product = await prisma.product.create({
             data: {
@@ -63,7 +68,7 @@ export async function POST(req) {
                 sku,
                 productType: productType || 'GOODS',
                 priceUnit: priceUnit || 'PER_DAY',
-                category: category || null,
+                category: productCategory || null,
                 costPrice: parseFloat(costPrice),
                 salePrice: parseFloat(salePrice),
                 quantityOnHand: parseInt(quantityOnHand),

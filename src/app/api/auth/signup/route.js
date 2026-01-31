@@ -6,10 +6,15 @@ import crypto from 'crypto';
 
 export async function POST(req) {
   try {
-    const { name, email, password, role, companyName, gstin, productCategory, couponCode } = await req.json();
+    const { name, email, password, role, companyName, gstin, productCategory, customCategory, couponCode } = await req.json();
 
     if (!email || !password || !name) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+    }
+
+    // For vendors with "Other" category, customCategory is required
+    if (role === 'VENDOR' && productCategory === 'Other' && !customCategory) {
+      return NextResponse.json({ error: 'Please specify your category' }, { status: 400 });
     }
 
     const existingUser = await prisma.user.findUnique({
@@ -64,6 +69,7 @@ export async function POST(req) {
         companyName: role === 'VENDOR' ? companyName : undefined,
         gstin: role === 'VENDOR' ? gstin : undefined,
         category: role === 'VENDOR' ? productCategory : undefined,
+        customCategory: role === 'VENDOR' && productCategory === 'Other' ? customCategory : undefined,
         otp,
         otpExpiry,
         isVerified: false,

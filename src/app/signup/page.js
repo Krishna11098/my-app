@@ -17,6 +17,7 @@ export default function Signup() {
         companyName: '',
         gstin: '',
         productCategory: '',
+        customCategory: '',
         couponCode: '',
     });
     const [loading, setLoading] = useState(false);
@@ -220,8 +221,22 @@ export default function Signup() {
                                             <option value="Fashion">Fashion</option>
                                             <option value="Tools">Tools</option>
                                             <option value="Photography">Photography</option>
+                                            <option value="Outdoors">Outdoors</option>
+                                            <option value="Events">Events</option>
+                                            <option value="Vehicles">Vehicles</option>
+                                            <option value="Audio/Video">Audio/Video</option>
                                             <option value="Other">Other</option>
                                         </select>
+                                        {formData.productCategory === 'Other' && (
+                                            <input
+                                                name="customCategory"
+                                                placeholder="Enter your category (e.g., Sports Equipment)"
+                                                required
+                                                value={formData.customCategory}
+                                                onChange={handleChange}
+                                                className="w-full bg-gray-900 border-4 border-gray-800 text-white px-4 py-3 focus:outline-none focus:border-purple-500 transition-colors placeholder-gray-700 font-medium"
+                                            />
+                                        )}
                                         <input
                                             name="gstin"
                                             placeholder="GSTIN Number"

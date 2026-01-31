@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata = {
-  title: "Joy Juncture - Premium Rental Marketplace",
-  description: "Experience the extraordinary in buying and selling.",
+  title: "RentalFlow - India's Premier Rental Marketplace",
+  description: "Rent anything from cameras to cars, furniture to fashion. India's trusted rental platform.",
 };
 
 export default function RootLayout({ children }) {

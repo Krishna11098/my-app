@@ -77,7 +77,7 @@ function OrdersContent() {
                 {/* Orders List */}
                 <div className="space-y-6">
                     {loading ? (
-                        [...Array(3)].map(i => (
+                        [...Array(3)].map((_, i) => (
                             <div key={i} className="h-64 bg-gray-900 border-4 border-gray-800 animate-pulse" />
                         ))
                     ) : orders.length === 0 ? (
@@ -121,9 +121,9 @@ function OrdersContent() {
                                         </span>
                                     </div>
                                     <div className={`px-3 py-2 border-2 font-black uppercase text-xs shadow-[2px_2px_0px_0px_rgba(75,85,99,1)] ${order.status === 'CONFIRMED' ? 'bg-green-500/10 text-green-400 border-green-500' :
-                                            order.status === 'DRAFT' ? 'bg-blue-500/10 text-blue-400 border-blue-500' :
-                                                order.status === 'RETURNED' ? 'bg-gray-500/10 text-gray-400 border-gray-500' :
-                                                    'bg-yellow-500/10 text-yellow-400 border-yellow-500'
+                                        order.status === 'DRAFT' ? 'bg-blue-500/10 text-blue-400 border-blue-500' :
+                                            order.status === 'RETURNED' ? 'bg-gray-500/10 text-gray-400 border-gray-500' :
+                                                'bg-yellow-500/10 text-yellow-400 border-yellow-500'
                                         }`}>
                                         {order.status}
                                     </div>
@@ -180,7 +180,7 @@ function OrdersContent() {
                                                     </motion.button>
                                                 </Link>
                                             )}
-                                            {order.isOrder && (
+                                            {(order.isOrder || order.status === 'CONFIRMED') && (
                                                 <>
                                                     <Link href={`/orders/${order.id}`}>
                                                         <motion.button

@@ -2,8 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/context/AuthContext';
+import { Calendar, ShoppingCart, Shield, Zap, Info, ArrowLeft, Plus, Minus, Check } from 'lucide-react';
+import Link from 'next/link';
 
 export default function ProductDetails() {
     const { id } = useParams();
@@ -15,7 +17,9 @@ export default function ProductDetails() {
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
     const [totalPrice, setTotalPrice] = useState(0);
-    const [error, setError] = useState()
+    const [quantity, setQuantity] = useState(1);
+    const [addingToCart, setAddingToCart] = useState(false);
+    const [successMessage, setSuccessMessage] = useState('');
 
     useEffect(() => {
         fetch(`/api/products/${id}`)
@@ -27,7 +31,6 @@ export default function ProductDetails() {
             .catch(err => setLoading(false));
     }, [id]);
 
-    // Simple price calculation logic
     const calculateEstimate = () => {
         if (!startDate || !endDate || !product) return;
 
@@ -35,18 +38,16 @@ export default function ProductDetails() {
         const end = new Date(endDate);
         const diffTime = Math.abs(end - start);
         const diffHours = Math.ceil(diffTime / (1000 * 60 * 60));
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
 
-        // Find best pricing scheme (Naive approach: check Day first)
         const dayConfig = product.priceConfigs.find(p => p.periodUnit === 'DAY');
         const hourConfig = product.priceConfigs.find(p => p.periodUnit === 'HOUR');
 
         let price = 0;
-
         if (dayConfig) {
-            price = parseFloat(dayConfig.price) * diffDays;
+            price = parseFloat(dayConfig.price) * diffDays * quantity;
         } else if (hourConfig) {
-            price = parseFloat(hourConfig.price) * diffHours;
+            price = parseFloat(hourConfig.price) * diffHours * quantity;
         }
 
         setTotalPrice(price);
@@ -54,28 +55,26 @@ export default function ProductDetails() {
 
     useEffect(() => {
         calculateEstimate();
-    }, [startDate, endDate]);
+    }, [startDate, endDate, quantity, product]);
 
-    const handleRent = async () => {
+    const handleAction = async (type) => {
         if (!user) {
             router.push('/login');
             return;
         }
 
-        if (totalPrice <= 0 || !startDate || !endDate) return;
+        if (type === 'RENTAL' && (totalPrice <= 0 || !startDate || !endDate)) return;
 
+        setAddingToCart(true);
         try {
             const payload = {
                 userId: user.id,
                 productId: product.id,
-                quantity: 1,
-                type: 'RENTAL',
-                startDate,
-                endDate
+                quantity: parseInt(quantity),
+                type,
+                ...(type === 'RENTAL' ? { startDate, endDate } : {})
             };
-            console.log('[BOOK NOW] Sending payload:', payload);
 
-            // Add to Cart (Rental) with specific dates
             const res = await fetch('/api/cart', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -83,154 +82,195 @@ export default function ProductDetails() {
             });
 
             if (res.ok) {
-                alert('Added to cart as Rental!');
-                router.push('/cart');
+                setSuccessMessage(`Added to cart as ${type === 'RENTAL' ? 'Rental' : 'Purchase'}!`);
+                setTimeout(() => setSuccessMessage(''), 3000);
             } else {
                 const data = await res.json();
-                alert('Failed to book: ' + (data.error || 'Unknown error'));
+                alert('Action failed: ' + (data.error || 'Unknown error'));
             }
         } catch (err) {
             console.error(err);
             alert('Something went wrong');
+        } finally {
+            setAddingToCart(false);
         }
     };
 
-    if (loading) return <div className="min-h-screen bg-black flex items-center justify-center text-white">Loading...</div>;
-    if (!product) return <div className="min-h-screen bg-black flex items-center justify-center text-white">Product not found</div>;
+    if (loading) return (
+        <div className="min-h-screen bg-black flex items-center justify-center">
+            <motion.div
+                animate={{ rotate: 360 }}
+                transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                className="w-12 h-12 border-4 border-purple-500 border-t-transparent"
+            />
+        </div>
+    );
+
+    if (!product) return <div className="min-h-screen bg-black flex items-center justify-center text-white font-black text-2xl uppercase tracking-tighter">Product not found</div>;
 
     return (
-        <div className="min-h-screen bg-black text-white p-6 md:p-10">
-            <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-12">
+        <div className="min-h-screen bg-black text-white p-6 md:p-12 selection:bg-purple-500 selection:text-white">
+            <div className="max-w-7xl mx-auto">
+                <Link href="/dashboard" className="inline-flex items-center gap-2 mb-8 text-sm font-black uppercase tracking-widest hover:text-purple-400 transition-colors group">
+                    <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+                    Back to Browse
+                </Link>
 
-                {/* Left: Images */}
-                <motion.div
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    className="bg-gray-900/50 rounded-3xl overflow-hidden h-[500px] border border-gray-800"
-                >
-                    {product.imageUrls && product.imageUrls[0] ? (
-                        <img src={product.imageUrls[0]} alt={product.name} className="w-full h-full object-cover" />
-                    ) : (
-                        <div className="w-full h-full flex items-center justify-center text-gray-700 text-5xl font-bold">JOY</div>
-                    )}
-                </motion.div>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+                    {/* Left Side: BIG BOLD IMAGE */}
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="relative group"
+                    >
+                        <div className="absolute inset-0 bg-purple-600 translate-x-4 translate-y-4 -z-10 border-4 border-black" />
+                        <div className="bg-white border-4 border-black h-[500px] overflow-hidden flex items-center justify-center">
+                            {product.imageUrls?.[0] ? (
+                                <img src={product.imageUrls[0]} alt={product.name} className="w-full h-full object-cover grayscale hover:grayscale-0 transition-all duration-500" />
+                            ) : (
+                                <Zap className="w-32 h-32 text-black" strokeWidth={3} />
+                            )}
+                        </div>
+                    </motion.div>
 
-                {/* Right: Details */}
-                <motion.div
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    className="space-y-8"
-                >
-                    <div>
-                        <span className="bg-purple-600/20 text-purple-400 px-3 py-1 rounded-full text-sm font-semibold mb-4 inline-block">
-                            {product.attributes?.category || 'Rental'}
-                        </span>
-                        <h1 className="text-4xl md:text-5xl font-bold mb-4">{product.name}</h1>
-                        <p className="text-gray-400 text-lg leading-relaxed">{product.description}</p>
-                    </div>
-
-                    <div className="border-t border-gray-800 pt-8">
-                        <h3 className="text-xl font-bold mb-6">Configuration</h3>
-
-                        <div className="grid grid-cols-2 gap-6 mb-6">
-                            <div>
-                                <label className="block text-sm text-gray-500 mb-2">Start Date</label>
-                                <input
-                                    type="datetime-local"
-                                    className="w-full bg-gray-900 border border-gray-700 rounded-xl p-3 text-white outline-none focus:border-purple-500"
-                                    value={startDate}
-                                    onChange={(e) => {
-                                        const value = e.target.value
-
-                                        if(value >= Date.now()){
-                                            setStartDate(value);
-                                        }
-                                        else{
-                                            alert("please select a valid date")
-                                        }
-                                    }
-                                }
-                                       
-                                />
+                    {/* Right Side: BRUTALIST DETAILS */}
+                    <div className="flex flex-col gap-8">
+                        <div>
+                            <div className="inline-block bg-pink-500 text-black px-4 py-1 border-4 border-black font-black uppercase text-xs tracking-widest mb-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                                {product.category || 'Rental'}
                             </div>
-                            <div>
-                                <label className="block text-sm text-gray-500 mb-2">End Date</label>
-                                <input
-                                    type="datetime-local"
-                                    className="w-full bg-gray-900 border border-gray-700 rounded-xl p-3 text-white outline-none focus:border-purple-500"
-                                    value={endDate}
-                                    onChange={(e) => setEndDate(e.target.value)}
-                                />
-                            </div>
+                            <h1 className="text-6xl md:text-8xl font-black uppercase tracking-tighter leading-none mb-4 break-words">
+                                {product.name}
+                            </h1>
+                            <p className="text-xl text-gray-400 font-bold leading-tight max-w-xl">
+                                {product.description}
+                            </p>
                         </div>
 
-                        <div className="bg-gray-900/40 p-6 rounded-2xl border border-gray-800 space-y-4">
-                            <div className="flex justify-between items-center">
+                        {/* CONFIGURATION BOX */}
+                        <div className="bg-white text-black border-4 border-black p-8 shadow-[8px_8px_0px_0px_rgba(124,58,237,1)]">
+                            <h2 className="text-3xl font-black uppercase tracking-tighter mb-6 flex items-center gap-2">
+                                <Plus className="w-8 h-8" strokeWidth={4} /> Configure Your Needs
+                            </h2>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
                                 <div>
-                                    <p className="text-gray-400 text-sm">Rental Estimate</p>
-                                    <div className="text-3xl font-bold text-white">
-                                        {totalPrice > 0 ? `₹${totalPrice.toLocaleString()}` : '—'}
-                                    </div>
+                                    <label className="block text-xs font-black uppercase tracking-widest mb-2">From</label>
+                                    <input
+                                        type="datetime-local"
+                                        className="w-full bg-gray-100 border-4 border-black p-4 font-black outline-none focus:bg-purple-100 transition-colors"
+                                        value={startDate}
+                                        min={new Date().toISOString().slice(0, 16)}
+                                        onChange={e => setStartDate(e.target.value)}
+                                    />
                                 </div>
-                                <button
-                                    onClick={handleRent}
-                                    disabled={totalPrice <= 0}
-                                    className="px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold rounded-xl hover:shadow-lg hover:shadow-purple-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all transform hover:-translate-y-1"
-                                >
-                                    Book Now
-                                </button>
-                            </div>
-
-                            {/* Buy Option */}
-                            <div className="pt-4 border-t border-gray-800 flex justify-between items-center">
                                 <div>
-                                    <p className="text-gray-400 text-sm">Buy Outright</p>
-                                    <div className="text-xl font-bold text-white">
-                                        ₹{parseFloat(product.salePrice || 0).toLocaleString()}
-                                    </div>
+                                    <label className="block text-xs font-black uppercase tracking-widest mb-2">To</label>
+                                    <input
+                                        type="datetime-local"
+                                        className="w-full bg-gray-100 border-4 border-black p-4 font-black outline-none focus:bg-purple-100 transition-colors"
+                                        value={endDate}
+                                        min={startDate || new Date().toISOString().slice(0, 16)}
+                                        onChange={e => setEndDate(e.target.value)}
+                                    />
                                 </div>
-                                <button
-                                    onClick={async () => {
-                                        if (!user) return router.push('/login');
-                                        try {
-                                            const payload = { userId: user.id, productId: product.id, quantity: 1, type: 'SALE' };
-                                            console.log('[BUY NOW] Sending payload:', payload);
-                                            const res = await fetch('/api/cart', {
-                                                method: 'POST',
-                                                headers: { 'Content-Type': 'application/json' },
-                                                body: JSON.stringify(payload)
-                                            });
-                                            if (res.ok) {
-                                                alert('Added to cart as Purchase!');
-                                                router.push('/cart');
-                                            }
-                                        } catch (e) { console.error(e); }
-                                    }}
-                                    className="px-6 py-2 bg-gray-800 text-white font-semibold rounded-xl hover:bg-gray-700 transition-colors border border-gray-700 hover:border-gray-600"
-                                >
-                                    Buy Now
-                                </button>
+                            </div>
+
+                            <div className="mb-8">
+                                <label className="block text-xs font-black uppercase tracking-widest mb-2">Quantity</label>
+                                <div className="flex items-center">
+                                    <button
+                                        onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                                        className="w-12 h-12 bg-black text-white flex items-center justify-center hover:bg-purple-600 transition-colors active:translate-y-1"
+                                    >
+                                        <Minus strokeWidth={4} />
+                                    </button>
+                                    <div className="w-20 h-12 border-y-4 border-black flex items-center justify-center font-black text-2xl">
+                                        {quantity}
+                                    </div>
+                                    <button
+                                        onClick={() => setQuantity(Math.min(product.quantityOnHand || 99, quantity + 1))}
+                                        className="w-12 h-12 bg-black text-white flex items-center justify-center hover:bg-purple-600 transition-colors active:translate-y-1"
+                                    >
+                                        <Plus strokeWidth={4} />
+                                    </button>
+                                    <span className="ml-4 font-black text-xs uppercase text-gray-500 italic">
+                                        {product.quantityOnHand} IN STOCK
+                                    </span>
+                                </div>
+                            </div>
+
+                            {/* RENTAL ACTION */}
+                            <div className="border-t-4 border-black pt-8 mb-8">
+                                <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+                                    <div>
+                                        <p className="text-xs font-black uppercase tracking-widest text-gray-500 mb-1">Rental Total</p>
+                                        <div className="text-6xl font-black tracking-tighter">
+                                            {totalPrice > 0 ? `₹${totalPrice.toLocaleString()}` : '—'}
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={() => handleAction('RENTAL')}
+                                        disabled={addingToCart || totalPrice <= 0}
+                                        className="h-16 px-12 bg-black text-white font-black uppercase text-xl border-4 border-black hover:bg-purple-600 hover:-translate-x-1 hover:-translate-y-1 transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] active:shadow-none active:translate-x-0 active:translate-y-0 disabled:opacity-50"
+                                    >
+                                        {addingToCart ? 'Wait...' : 'Book Now'}
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* PURCHASE ACTION */}
+                            <div className="bg-black text-white p-6 border-4 border-black shadow-[4px_4px_0px_0px_rgba(236,72,153,1)]">
+                                <div className="flex items-center justify-between gap-4">
+                                    <div>
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-pink-400 mb-1 lg:mb-0">Keep it forever?</p>
+                                        <div className="text-3xl font-black tracking-tighter">
+                                            ₹{(parseFloat(product.salePrice) * quantity).toLocaleString()}
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={() => handleAction('SALE')}
+                                        className="px-8 py-3 bg-pink-500 text-black font-black uppercase text-sm border-2 border-white hover:bg-white hover:text-black transition-colors"
+                                    >
+                                        Buy Choice
+                                    </button>
+                                </div>
                             </div>
                         </div>
 
-                        <p className="mt-4 text-xs text-center text-gray-500">
-                            *Includes taxes and fees. Security deposit may apply.
-                        </p>
-                    </div>
+                        {/* SUCCESS TOAST */}
+                        <AnimatePresence>
+                            {successMessage && (
+                                <motion.div
+                                    initial={{ opacity: 0, y: 20 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    exit={{ opacity: 0, y: -20 }}
+                                    className="bg-green-500 text-black border-4 border-black p-4 font-black uppercase text-center shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] flex items-center justify-center gap-2"
+                                >
+                                    <Check strokeWidth={4} /> {successMessage}
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
 
-                    {/* Specs / Info */}
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="p-4 bg-gray-900/30 rounded-xl border border-gray-800">
-                            <p className="text-xs text-gray-500">Condition</p>
-                            <p className="font-semibold text-white">Excellent</p>
-                        </div>
-                        <div className="p-4 bg-gray-900/30 rounded-xl border border-gray-800">
-                            <p className="text-xs text-gray-500">SKU</p>
-                            <p className="font-semibold text-white">{product.sku}</p>
+                        {/* META INFO */}
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="border-4 border-white p-4">
+                                <p className="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-1">Authenticity</p>
+                                <div className="flex items-center gap-2">
+                                    <Shield className="w-5 h-5 text-purple-400" strokeWidth={3} />
+                                    <span className="font-black uppercase text-sm">Verified Vendor</span>
+                                </div>
+                            </div>
+                            <div className="border-4 border-white p-4">
+                                <p className="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-1">Unique SKU</p>
+                                <div className="flex items-center gap-2">
+                                    <Info className="w-5 h-5 text-pink-400" strokeWidth={3} />
+                                    <span className="font-black uppercase text-sm">{product.sku}</span>
+                                </div>
+                            </div>
                         </div>
                     </div>
-
-                </motion.div>
+                </div>
             </div>
         </div>
     );

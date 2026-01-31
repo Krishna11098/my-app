@@ -127,8 +127,15 @@ export default function CheckoutPage() {
     };
 
     const getFinalTotal = () => {
-        const total = Number(quotation?.totalAmount || 0);
+        const subtotal = Number(quotation?.subtotal || 0);
+        const tax = Number(quotation?.taxAmount) || Math.round(subtotal * 0.18);
+        const deliveryCharge = deliveryMethod === 'STANDARD_DELIVERY' ? 30 : 0;
+        const total = subtotal + tax + deliveryCharge;
         return Math.max(0, total - discount);
+    };
+
+    const getDeliveryCharge = () => {
+        return deliveryMethod === 'STANDARD_DELIVERY' ? 30 : 0;
     };
 
     const loadRazorpay = () => {
@@ -165,12 +172,12 @@ export default function CheckoutPage() {
                 credentials: 'include',
                 body: JSON.stringify({ amount: finalAmount, quotationId: quotation.id })
             });
-            
+
             if (!paymentRes.ok) {
                 const data = await paymentRes.json();
                 throw new Error(data.error || 'Failed to create payment order');
             }
-            
+
             const paymentData = await paymentRes.json();
 
             const options = {
@@ -199,8 +206,8 @@ export default function CheckoutPage() {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             credentials: 'include',
-                            body: JSON.stringify({ 
-                                quotationId, 
+                            body: JSON.stringify({
+                                quotationId,
                                 paymentId: response.razorpay_payment_id,
                                 razorpayOrderId: response.razorpay_order_id,
                                 addressId: selectedAddressId,
@@ -274,9 +281,8 @@ export default function CheckoutPage() {
                         { num: 3, label: 'Payment' }
                     ].map((s, i) => (
                         <div key={s.num} className="flex items-center">
-                            <div className={`flex items-center justify-center w-10 h-10 rounded-full font-bold transition-all ${
-                                step >= s.num ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-500'
-                            }`}>
+                            <div className={`flex items-center justify-center w-10 h-10 rounded-full font-bold transition-all ${step >= s.num ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-500'
+                                }`}>
                                 {step > s.num ? '✓' : s.num}
                             </div>
                             <span className={`ml-2 text-sm ${step >= s.num ? 'text-white' : 'text-gray-500'}`}>{s.label}</span>
@@ -323,7 +329,7 @@ export default function CheckoutPage() {
                                     </div>
                                 ))}
                             </div>
-                            
+
                             <div className="mt-4 pt-4 border-t border-gray-800">
                                 <div className="flex justify-between text-sm">
                                     <span className="text-gray-400">Rental Period:</span>
@@ -359,11 +365,10 @@ export default function CheckoutPage() {
                                         <div className="space-y-3 mb-6">
                                             <div
                                                 onClick={() => setDeliveryMethod('STANDARD_DELIVERY')}
-                                                className={`p-4 rounded-xl cursor-pointer border-2 transition-all flex justify-between items-center ${
-                                                    deliveryMethod === 'STANDARD_DELIVERY'
-                                                        ? 'border-purple-500 bg-purple-500/10'
-                                                        : 'border-gray-700 bg-black/40 hover:border-gray-600'
-                                                }`}
+                                                className={`p-4 rounded-xl cursor-pointer border-2 transition-all flex justify-between items-center ${deliveryMethod === 'STANDARD_DELIVERY'
+                                                    ? 'border-purple-500 bg-purple-500/10'
+                                                    : 'border-gray-700 bg-black/40 hover:border-gray-600'
+                                                    }`}
                                             >
                                                 <div className="flex items-center gap-3">
                                                     <span className="text-2xl">🚚</span>
@@ -372,15 +377,14 @@ export default function CheckoutPage() {
                                                         <p className="text-sm text-gray-400">Delivered to your address</p>
                                                     </div>
                                                 </div>
-                                                <span className="text-green-400 font-bold">Free</span>
+                                                <span className="text-orange-400 font-bold">₹30</span>
                                             </div>
                                             <div
                                                 onClick={() => setDeliveryMethod('PICKUP_FROM_STORE')}
-                                                className={`p-4 rounded-xl cursor-pointer border-2 transition-all flex justify-between items-center ${
-                                                    deliveryMethod === 'PICKUP_FROM_STORE'
-                                                        ? 'border-purple-500 bg-purple-500/10'
-                                                        : 'border-gray-700 bg-black/40 hover:border-gray-600'
-                                                }`}
+                                                className={`p-4 rounded-xl cursor-pointer border-2 transition-all flex justify-between items-center ${deliveryMethod === 'PICKUP_FROM_STORE'
+                                                    ? 'border-purple-500 bg-purple-500/10'
+                                                    : 'border-gray-700 bg-black/40 hover:border-gray-600'
+                                                    }`}
                                             >
                                                 <div className="flex items-center gap-3">
                                                     <span className="text-2xl">🏪</span>
@@ -400,11 +404,10 @@ export default function CheckoutPage() {
                                                 <div
                                                     key={addr.id}
                                                     onClick={() => setSelectedAddressId(addr.id)}
-                                                    className={`p-4 rounded-xl cursor-pointer border-2 transition-all ${
-                                                        selectedAddressId === addr.id 
-                                                            ? 'border-purple-500 bg-purple-500/10' 
-                                                            : 'border-gray-700 bg-black/40 hover:border-gray-600'
-                                                    }`}
+                                                    className={`p-4 rounded-xl cursor-pointer border-2 transition-all ${selectedAddressId === addr.id
+                                                        ? 'border-purple-500 bg-purple-500/10'
+                                                        : 'border-gray-700 bg-black/40 hover:border-gray-600'
+                                                        }`}
                                                 >
                                                     <div className="flex items-start justify-between">
                                                         <div>
@@ -432,25 +435,25 @@ export default function CheckoutPage() {
                                         ) : (
                                             <form onSubmit={handleAddNewAddress} className="bg-black/40 p-4 rounded-xl space-y-4">
                                                 <input type="text" placeholder="Label (e.g., Home, Office)" value={newAddress.label}
-                                                    onChange={(e) => setNewAddress({...newAddress, label: e.target.value})}
+                                                    onChange={(e) => setNewAddress({ ...newAddress, label: e.target.value })}
                                                     className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-purple-500" />
                                                 <input type="text" placeholder="Street Address" value={newAddress.street}
-                                                    onChange={(e) => setNewAddress({...newAddress, street: e.target.value})} required
+                                                    onChange={(e) => setNewAddress({ ...newAddress, street: e.target.value })} required
                                                     className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-purple-500" />
                                                 <div className="grid grid-cols-2 gap-4">
                                                     <input type="text" placeholder="City" value={newAddress.city}
-                                                        onChange={(e) => setNewAddress({...newAddress, city: e.target.value})} required
+                                                        onChange={(e) => setNewAddress({ ...newAddress, city: e.target.value })} required
                                                         className="px-4 py-3 bg-gray-800 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-purple-500" />
                                                     <input type="text" placeholder="State" value={newAddress.state}
-                                                        onChange={(e) => setNewAddress({...newAddress, state: e.target.value})} required
+                                                        onChange={(e) => setNewAddress({ ...newAddress, state: e.target.value })} required
                                                         className="px-4 py-3 bg-gray-800 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-purple-500" />
                                                 </div>
                                                 <div className="grid grid-cols-2 gap-4">
                                                     <input type="text" placeholder="Postal Code" value={newAddress.postalCode}
-                                                        onChange={(e) => setNewAddress({...newAddress, postalCode: e.target.value})} required
+                                                        onChange={(e) => setNewAddress({ ...newAddress, postalCode: e.target.value })} required
                                                         className="px-4 py-3 bg-gray-800 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-purple-500" />
                                                     <input type="text" placeholder="Country" value={newAddress.country}
-                                                        onChange={(e) => setNewAddress({...newAddress, country: e.target.value})}
+                                                        onChange={(e) => setNewAddress({ ...newAddress, country: e.target.value })}
                                                         className="px-4 py-3 bg-gray-800 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-purple-500" />
                                                 </div>
                                                 <div className="flex gap-3">
@@ -481,11 +484,10 @@ export default function CheckoutPage() {
                                                         <div
                                                             key={addr.id}
                                                             onClick={() => setBillingAddressId(addr.id)}
-                                                            className={`p-4 rounded-xl cursor-pointer border-2 transition-all ${
-                                                                billingAddressId === addr.id 
-                                                                    ? 'border-blue-500 bg-blue-500/10' 
-                                                                    : 'border-gray-700 bg-black/40 hover:border-gray-600'
-                                                            }`}
+                                                            className={`p-4 rounded-xl cursor-pointer border-2 transition-all ${billingAddressId === addr.id
+                                                                ? 'border-blue-500 bg-blue-500/10'
+                                                                : 'border-gray-700 bg-black/40 hover:border-gray-600'
+                                                                }`}
                                                         >
                                                             <p className="font-medium">{addr.street}</p>
                                                             <p className="text-sm text-gray-400">{addr.city}, {addr.state} {addr.postalCode}</p>
@@ -542,7 +544,7 @@ export default function CheckoutPage() {
                     <div className="lg:col-span-1">
                         <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 sticky top-24">
                             <h2 className="text-xl font-bold mb-6">Order Summary</h2>
-                            
+
                             {/* Coupon Code Input */}
                             <div className="mb-6">
                                 {!couponApplied ? (
@@ -576,15 +578,19 @@ export default function CheckoutPage() {
                             <div className="space-y-3 mb-6">
                                 <div className="flex justify-between text-gray-400">
                                     <span>Subtotal</span>
-                                    <span>₹{Number(quotation.subtotal).toLocaleString()}</span>
+                                    <span>₹{Number(quotation.subtotal || 0).toLocaleString()}</span>
                                 </div>
                                 <div className="flex justify-between text-gray-400">
                                     <span>Tax (18%)</span>
-                                    <span>₹{Number(quotation.taxAmount).toLocaleString()}</span>
+                                    <span>₹{(Number(quotation.taxAmount) || Math.round(Number(quotation.subtotal || 0) * 0.18)).toLocaleString()}</span>
                                 </div>
                                 <div className="flex justify-between text-gray-400">
                                     <span>Delivery</span>
-                                    <span className="text-green-400">Free</span>
+                                    {getDeliveryCharge() === 0 ? (
+                                        <span className="text-green-400">Free</span>
+                                    ) : (
+                                        <span>₹{getDeliveryCharge()}</span>
+                                    )}
                                 </div>
                                 {discount > 0 && (
                                     <div className="flex justify-between text-green-400">

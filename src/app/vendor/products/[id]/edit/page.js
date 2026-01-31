@@ -38,7 +38,7 @@ export default function EditProduct() {
                     name: data.name,
                     description: data.description || '',
                     sku: data.sku,
-                    category: data.attributes?.category || '',
+                    category: data.attributes?.category || 'Electronics',
                     quantityOnHand: data.quantityOnHand,
                     costPrice: data.costPrice,
                     salePrice: data.salePrice,
@@ -54,12 +54,17 @@ export default function EditProduct() {
                 }
                 setAttributes(attrs);
 
-                // Pricing
-                setPricing(data.priceConfigs.map(p => ({
-                    unit: p.periodUnit, // Map unit if needed
-                    duration: p.duration,
-                    price: p.price
-                })));
+                // Pricing - normalize to always have HOUR, DAY, WEEK
+                const existingPricing = data.priceConfigs || [];
+                const normalizedPricing = ['HOUR', 'DAY', 'WEEK'].map(unit => {
+                    const existing = existingPricing.find(p => p.periodUnit === unit);
+                    return {
+                        unit,
+                        duration: 1,
+                        price: existing && existing.price ? Math.floor(Number(existing.price)) : ''
+                    };
+                });
+                setPricing(normalizedPricing);
 
                 setImageUrls(data.imageUrls || []);
                 setLoading(false);
@@ -80,13 +85,13 @@ export default function EditProduct() {
     const addAttributeRow = () => setAttributes([...attributes, { key: '', value: '' }]);
     const removeAttributeRow = (index) => setAttributes(attributes.filter((_, i) => i !== index));
 
-    const handlePriceChange = (index, field, value) => {
-        const newPricing = [...pricing];
-        newPricing[index][field] = value;
+    const handlePriceChange = (unit, value) => {
+        let intValue = value === '' ? '' : Math.max(1, parseInt(value) || 1);
+        const newPricing = pricing.map(p => 
+            p.unit === unit ? { ...p, price: intValue } : p
+        );
         setPricing(newPricing);
     };
-    const addPriceRow = () => setPricing([...pricing, { unit: 'DAY', duration: 1, price: '' }]);
-    const removePriceRow = (index) => setPricing(pricing.filter((_, i) => i !== index));
 
     const handleImageUpload = async (e) => {
         const file = e.target.files[0];
@@ -108,6 +113,14 @@ export default function EditProduct() {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        
+        // Check all prices are filled
+        const emptyPrices = pricing.filter(p => !p.price || p.price <= 0);
+        if (emptyPrices.length > 0) {
+            setError('Please fill in all rental prices (Hour, Day, Week).');
+            return;
+        }
+        
         setSaving(true);
         setError('');
 
@@ -213,48 +226,48 @@ export default function EditProduct() {
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                             <div>
                                 <label className="block text-sm text-gray-400 mb-1">Quantity</label>
-                                <input type="number" required className="w-full bg-black border border-gray-700 rounded-lg p-3 outline-none"
-                                    value={formData.quantityOnHand} onChange={e => setFormData({ ...formData, quantityOnHand: e.target.value })} />
+                                <input type="number" min="0" required className="w-full bg-black border border-gray-700 rounded-lg p-3 outline-none"
+                                    value={formData.quantityOnHand} onChange={e => setFormData({ ...formData, quantityOnHand: Math.max(0, parseInt(e.target.value) || 0) })} />
                             </div>
                             <div>
                                 <label className="block text-sm text-gray-400 mb-1">Item Cost</label>
-                                <input type="number" required className="w-full bg-black border border-gray-700 rounded-lg p-3 outline-none"
-                                    value={formData.costPrice} onChange={e => setFormData({ ...formData, costPrice: e.target.value })} />
+                                <input type="number" min="0" step="0.01" required className="w-full bg-black border border-gray-700 rounded-lg p-3 outline-none"
+                                    value={formData.costPrice} onChange={e => setFormData({ ...formData, costPrice: Math.max(0, parseFloat(e.target.value) || 0) })} />
                             </div>
                             <div>
                                 <label className="block text-sm text-gray-400 mb-1">Sale Price</label>
-                                <input type="number" required className="w-full bg-black border border-gray-700 rounded-lg p-3 outline-none"
-                                    value={formData.salePrice} onChange={e => setFormData({ ...formData, salePrice: e.target.value })} />
+                                <input type="number" min="0" step="0.01" required className="w-full bg-black border border-gray-700 rounded-lg p-3 outline-none"
+                                    value={formData.salePrice} onChange={e => setFormData({ ...formData, salePrice: Math.max(0, parseFloat(e.target.value) || 0) })} />
                             </div>
                         </div>
                     </div>
 
                     {/* Pricing */}
                     <div className="bg-gray-900/50 p-6 rounded-2xl border border-gray-800">
-                        <div className="flex justify-between items-center mb-4">
-                            <h2 className="text-xl font-semibold text-purple-400">Rental Pricing</h2>
-                            <button type="button" onClick={addPriceRow} className="text-sm text-purple-400 hover:text-white underline">+ Add Tier</button>
-                        </div>
-                        <div className="space-y-3">
-                            {pricing.map((price, index) => (
-                                <div key={index} className="flex gap-4 items-end bg-black/40 p-3 rounded-xl border border-gray-800/50">
-                                    <div className="flex-1">
-                                        <input type="number" className="w-full bg-transparent border-b border-gray-700 py-1 outline-none text-white"
-                                            value={price.duration} onChange={e => handlePriceChange(index, 'duration', e.target.value)} />
+                        <h2 className="text-xl font-semibold mb-4 text-purple-400">Rental Pricing</h2>
+                        <p className="text-sm text-gray-400 mb-4">Set your rental prices for each time unit</p>
+
+                        <div className="space-y-4">
+                            {pricing.map((price) => (
+                                <div key={price.unit} className="flex gap-4 items-center bg-black/40 p-4 rounded-xl border border-gray-800/50">
+                                    <div className="w-24 text-center">
+                                        <span className="text-lg font-bold text-purple-400">
+                                            {price.unit === 'HOUR' ? '⏰ Hour' : price.unit === 'DAY' ? '📅 Day' : '📆 Week'}
+                                        </span>
                                     </div>
                                     <div className="flex-1">
-                                        <select className="w-full bg-transparent border-b border-gray-700 py-1 text-gray-300 outline-none"
-                                            value={price.unit} onChange={e => handlePriceChange(index, 'unit', e.target.value)}>
-                                            <option value="HOUR">Hour(s)</option>
-                                            <option value="DAY">Day(s)</option>
-                                            <option value="WEEK">Week(s)</option>
-                                        </select>
+                                        <label className="text-xs text-gray-500 mb-1 block">Price per {price.unit.toLowerCase()} (₹)</label>
+                                        <input 
+                                            type="number" 
+                                            min="1" 
+                                            step="1" 
+                                            required
+                                            placeholder="Enter price"
+                                            className="w-full bg-black border border-gray-700 rounded-lg p-3 focus:border-purple-500 outline-none text-white"
+                                            value={price.price} 
+                                            onChange={e => handlePriceChange(price.unit, Math.max(1, parseInt(e.target.value) || 1))} 
+                                        />
                                     </div>
-                                    <div className="flex-1">
-                                        <input type="number" className="w-full bg-transparent border-b border-gray-700 py-1 outline-none text-white"
-                                            value={price.price} onChange={e => handlePriceChange(index, 'price', e.target.value)} />
-                                    </div>
-                                    {index > 0 && <button type="button" onClick={() => removePriceRow(index)} className="text-red-500 pb-1">×</button>}
                                 </div>
                             ))}
                         </div>

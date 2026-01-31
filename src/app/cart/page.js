@@ -97,7 +97,8 @@ export default function CartPage() {
         );
     }
 
-    const total = cart.lines.reduce((sum, line) => sum + parseFloat(line.subTotal || 0), 0);
+    // Use line.lineTotal from API, fallback to 0 if missing
+    const total = cart.lines.reduce((sum, line) => sum + parseFloat(line.lineTotal || 0), 0);
 
     return (
         <div className="min-h-screen bg-black text-white p-6 md:p-12">
@@ -195,7 +196,7 @@ export default function CartPage() {
                                                 <div className="flex items-center justify-between">
                                                     <div>
                                                         <p className="text-sm text-gray-500 uppercase font-bold tracking-wide mb-1">Subtotal</p>
-                                                        <p className="text-2xl font-black text-purple-400">₹{parseFloat(line.subTotal || 0).toLocaleString()}</p>
+                                                        <p className="text-2xl font-black text-purple-400">₹{parseFloat(line.lineTotal || 0).toLocaleString()}</p>
                                                     </div>
                                                     <motion.button
                                                         whileHover={{ y: -3 }}

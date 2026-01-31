@@ -3,14 +3,16 @@
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { useRef } from 'react';
+import { useAuth } from '@/context/AuthContext';
 import {
     Package, ShoppingCart, TrendingUp, Shield,
     Zap, Users, Clock, Award, ArrowRight,
-    CreditCard, Truck, BarChart3
+    CreditCard, Truck, BarChart3, LogOut
 } from 'lucide-react';
 
 export default function Home() {
     const heroRef = useRef(null);
+    const { user, logout } = useAuth();
 
     const features = [
         {
@@ -100,24 +102,56 @@ export default function Home() {
                         </div>
                     </Link>
                     <div className="flex items-center gap-4">
-                        <Link href="/login">
-                            <motion.button
-                                whileHover={{ x: -4, y: -4 }}
-                                whileTap={{ x: 0, y: 0 }}
-                                className="hidden sm:block px-5 py-2 font-bold uppercase text-sm tracking-wide text-white hover:text-purple-400 transition-colors"
-                            >
-                                Sign In
-                            </motion.button>
-                        </Link>
-                        <Link href="/signup">
-                            <motion.button
-                                whileHover={{ x: -4, y: -4 }}
-                                whileTap={{ x: 0, y: 0 }}
-                                className="px-6 py-3 font-black uppercase text-sm bg-purple-500 text-black border-4 border-purple-500 shadow-[4px_4px_0px_0px_rgba(168,85,247,1)] hover:shadow-[8px_8px_0px_0px_rgba(168,85,247,1)] transition-all"
-                            >
-                                Get Started
-                            </motion.button>
-                        </Link>
+                        {user ? (
+                            <>
+                                {/* Credits Badge */}
+                                <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-purple-500/10 border-2 border-purple-500 shadow-[2px_2px_0px_0px_rgba(168,85,247,1)]">
+                                    <span className="text-purple-400 text-sm">₹</span>
+                                    <span className="text-sm font-black text-purple-400">{user.credits || 0}</span>
+                                </div>
+                                <Link href={user.role === 'VENDOR' ? '/vendor/dashboard' : '/dashboard'}>
+                                    <motion.button
+                                        whileHover={{ x: -2, y: -2 }}
+                                        whileTap={{ x: 0, y: 0 }}
+                                        className="flex items-center gap-2 px-4 py-2 font-bold uppercase text-sm bg-gray-900 border-2 border-gray-800 hover:border-purple-500 transition-all"
+                                    >
+                                        <div className="w-6 h-6 bg-purple-500 flex items-center justify-center text-black font-black text-xs">
+                                            {user.name?.[0] || '?'}
+                                        </div>
+                                        <span className="hidden md:block text-white">{user.name?.split(' ')[0]}</span>
+                                    </motion.button>
+                                </Link>
+                                <motion.button
+                                    onClick={logout}
+                                    whileHover={{ x: -2, y: -2 }}
+                                    whileTap={{ x: 0, y: 0 }}
+                                    className="p-2 border-2 border-red-500/30 text-red-400 hover:bg-red-500/10 transition-all"
+                                >
+                                    <LogOut className="w-5 h-5" strokeWidth={2.5} />
+                                </motion.button>
+                            </>
+                        ) : (
+                            <>
+                                <Link href="/login">
+                                    <motion.button
+                                        whileHover={{ x: -4, y: -4 }}
+                                        whileTap={{ x: 0, y: 0 }}
+                                        className="hidden sm:block px-5 py-2 font-bold uppercase text-sm tracking-wide text-white hover:text-purple-400 transition-colors"
+                                    >
+                                        Sign In
+                                    </motion.button>
+                                </Link>
+                                <Link href="/signup">
+                                    <motion.button
+                                        whileHover={{ x: -4, y: -4 }}
+                                        whileTap={{ x: 0, y: 0 }}
+                                        className="px-6 py-3 font-black uppercase text-sm bg-purple-500 text-black border-4 border-purple-500 shadow-[4px_4px_0px_0px_rgba(168,85,247,1)] hover:shadow-[8px_8px_0px_0px_rgba(168,85,247,1)] transition-all"
+                                    >
+                                        Get Started
+                                    </motion.button>
+                                </Link>
+                            </>
+                        )}
                     </div>
                 </div>
             </nav>

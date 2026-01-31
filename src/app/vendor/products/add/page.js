@@ -14,7 +14,6 @@ export default function AddProduct() {
         name: '',
         description: '',
         sku: '',
-        category: '',
         productType: 'GOODS',
         priceUnit: 'PER_DAY',
         quantityOnHand: 1,
@@ -31,7 +30,9 @@ export default function AddProduct() {
     ]);
 
     const [pricing, setPricing] = useState([
-        { unit: 'DAY', duration: 1, price: '' }
+        { unit: 'HOUR', duration: 1, price: '' },
+        { unit: 'DAY', duration: 1, price: '' },
+        { unit: 'WEEK', duration: 1, price: '' }
     ]);
 
     const [imageUrls, setImageUrls] = useState([]);
@@ -56,14 +57,6 @@ export default function AddProduct() {
         const newPricing = [...pricing];
         newPricing[index][field] = value;
         setPricing(newPricing);
-    };
-
-    const addPriceRow = () => {
-        setPricing([...pricing, { unit: 'DAY', duration: 1, price: '' }]);
-    };
-
-    const removePriceRow = (index) => {
-        setPricing(pricing.filter((_, i) => i !== index));
     };
 
     const handleImageUpload = async (e) => {
@@ -93,6 +86,14 @@ export default function AddProduct() {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        
+        // Check all prices are filled
+        const emptyPrices = pricing.filter(p => !p.price || p.price <= 0);
+        if (emptyPrices.length > 0) {
+            setError('Please fill in all rental prices (Hour, Day, Week).');
+            return;
+        }
+        
         setLoading(true);
         setError('');
 
@@ -101,8 +102,6 @@ export default function AddProduct() {
             if (curr.key) acc[curr.key] = curr.value;
             return acc;
         }, {});
-        // ensure category is in attributes
-        if (formData.category) attributesObj['category'] = formData.category;
 
         try {
             const res = await fetch('/api/vendor/products', {
@@ -163,22 +162,6 @@ export default function AddProduct() {
                                     value={formData.productType} onChange={e => setFormData({ ...formData, productType: e.target.value })}>
                                     <option value="GOODS">Goods (Physical Product)</option>
                                     <option value="SERVICE">Service</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label className="block text-sm text-gray-400 mb-1">Category</label>
-                                <select required className="w-full bg-black border border-gray-700 rounded-lg p-3 text-white outline-none"
-                                    value={formData.category} onChange={e => setFormData({ ...formData, category: e.target.value })}>
-                                    <option value="">Select Category</option>
-                                    <option value="Electronics">Electronics</option>
-                                    <option value="Furniture">Furniture</option>
-                                    <option value="Fashion">Fashion</option>
-                                    <option value="Outdoors">Outdoors</option>
-                                    <option value="Tools">Tools</option>
-                                    <option value="Events">Events</option>
-                                    <option value="Vehicles">Vehicles</option>
-                                    <option value="Photography">Photography</option>
-                                    <option value="Audio/Video">Audio/Video</option>
                                 </select>
                             </div>
                             <div>
@@ -256,65 +239,59 @@ export default function AddProduct() {
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                             <div>
                                 <label className="block text-sm text-gray-400 mb-1">Quantity On Hand</label>
-                                <input type="number" required className="w-full bg-black border border-gray-700 rounded-lg p-3 outline-none"
-                                    value={formData.quantityOnHand} onChange={e => setFormData({ ...formData, quantityOnHand: e.target.value && e.target.value > 0 ? e.target.value : 0 })} />
+                                <input type="number" min="0" required className="w-full bg-black border border-gray-700 rounded-lg p-3 outline-none"
+                                    value={formData.quantityOnHand} onChange={e => setFormData({ ...formData, quantityOnHand: Math.max(0, parseInt(e.target.value) || 0) })} />
                             </div>
                             <div>
                                 <label className="block text-sm text-gray-400 mb-1">Item Value (Cost)</label>
-                                <input type="number" required className="w-full bg-black border border-gray-700 rounded-lg p-3 outline-none"
-                                    value={formData.costPrice} onChange={e => setFormData({ ...formData, costPrice: e.target.value })} placeholder="₹" />
+                                <input type="number" min="0" step="0.01" required className="w-full bg-black border border-gray-700 rounded-lg p-3 outline-none"
+                                    value={formData.costPrice} onChange={e => setFormData({ ...formData, costPrice: Math.max(0, parseFloat(e.target.value) || 0) })} placeholder="₹" />
                             </div>
                             <div>
                                 <label className="block text-sm text-gray-400 mb-1">Retail Price (If Sold)</label>
-                                <input type="number" required className="w-full bg-black border border-gray-700 rounded-lg p-3 outline-none"
-                                    value={formData.salePrice} onChange={e => setFormData({ ...formData, salePrice: e.target.value })} placeholder="₹" />
+                                <input type="number" min="0" step="0.01" required className="w-full bg-black border border-gray-700 rounded-lg p-3 outline-none"
+                                    value={formData.salePrice} onChange={e => setFormData({ ...formData, salePrice: Math.max(0, parseFloat(e.target.value) || 0) })} placeholder="₹" />
                             </div>
                             <div>
                                 <label className="block text-sm text-gray-400 mb-1">Min Rental Period (hours)</label>
-                                <input type="number" required className="w-full bg-black border border-gray-700 rounded-lg p-3 outline-none"
-                                    value={formData.minRentalPeriod} onChange={e => setFormData({ ...formData, minRentalPeriod: parseInt(e.target.value) || 1 })} placeholder="e.g. 1" />
+                                <input type="number" min="1" required className="w-full bg-black border border-gray-700 rounded-lg p-3 outline-none"
+                                    value={formData.minRentalPeriod} onChange={e => setFormData({ ...formData, minRentalPeriod: Math.max(1, parseInt(e.target.value) || 1) })} placeholder="e.g. 1" />
                             </div>
                             <div>
                                 <label className="block text-sm text-gray-400 mb-1">Max Rental Period (hours)</label>
-                                <input type="number" required className="w-full bg-black border border-gray-700 rounded-lg p-3 outline-none"
-                                    value={formData.maxRentalPeriod} onChange={e => setFormData({ ...formData, maxRentalPeriod: parseInt(e.target.value) || 720 })} placeholder="e.g. 720" />
+                                <input type="number" min="1" required className="w-full bg-black border border-gray-700 rounded-lg p-3 outline-none"
+                                    value={formData.maxRentalPeriod} onChange={e => setFormData({ ...formData, maxRentalPeriod: Math.max(1, parseInt(e.target.value) || 720) })} placeholder="e.g. 720" />
                             </div>
                         </div>
                     </div>
 
                     {/* Section 3: Rental Pricing */}
                     <div className="bg-gray-900/50 p-6 rounded-2xl border border-gray-800">
-                        <div className="flex justify-between items-center mb-4">
-                            <h2 className="text-xl font-semibold text-purple-400">Rental Pricing Schemes</h2>
-                            <button type="button" onClick={addPriceRow} className="text-sm text-purple-400 hover:text-white underline">+ Add Tier</button>
-                        </div>
+                        <h2 className="text-xl font-semibold mb-4 text-purple-400">Rental Pricing</h2>
+                        <p className="text-sm text-gray-400 mb-4">Set your rental prices for each time unit</p>
 
-                        <div className="space-y-3">
+                        <div className="space-y-4">
                             {pricing.map((price, index) => (
-                                <motion.div key={index} layout className="flex gap-4 items-end bg-black/40 p-3 rounded-xl border border-gray-800/50">
-                                    <div className="flex-1">
-                                        <label className="text-xs text-gray-500">Duration</label>
-                                        <input type="number" className="w-full bg-transparent border-b border-gray-700 py-1 focus:border-purple-500 outline-none"
-                                            value={price.duration} onChange={e => handlePriceChange(index, 'duration', e.target.value)} />
+                                <div key={price.unit} className="flex gap-4 items-center bg-black/40 p-4 rounded-xl border border-gray-800/50">
+                                    <div className="w-24 text-center">
+                                        <span className="text-lg font-bold text-purple-400">
+                                            {price.unit === 'HOUR' ? '⏰ Hour' : price.unit === 'DAY' ? '📅 Day' : '📆 Week'}
+                                        </span>
                                     </div>
                                     <div className="flex-1">
-                                        <label className="text-xs text-gray-500">Unit</label>
-                                        <select className="w-full bg-transparent border-b border-gray-700 py-1 text-gray-300 outline-none"
-                                            value={price.unit} onChange={e => handlePriceChange(index, 'unit', e.target.value)}>
-                                            <option value="HOUR">Hour(s)</option>
-                                            <option value="DAY">Day(s)</option>
-                                            <option value="WEEK">Week(s)</option>
-                                        </select>
+                                        <label className="text-xs text-gray-500 mb-1 block">Price per {price.unit.toLowerCase()} (₹)</label>
+                                        <input 
+                                            type="number" 
+                                            min="1" 
+                                            step="1" 
+                                            required
+                                            placeholder="Enter price"
+                                            className="w-full bg-black border border-gray-700 rounded-lg p-3 focus:border-purple-500 outline-none"
+                                            value={price.price} 
+                                            onChange={e => handlePriceChange(index, 'price', Math.max(1, parseInt(e.target.value) || 1))} 
+                                        />
                                     </div>
-                                    <div className="flex-1">
-                                        <label className="text-xs text-gray-500">Price (₹)</label>
-                                        <input type="number" className="w-full bg-transparent border-b border-gray-700 py-1 focus:border-purple-500 outline-none"
-                                            value={price.price} onChange={e => handlePriceChange(index, 'price', e.target.value)} />
-                                    </div>
-                                    {index > 0 && (
-                                        <button type="button" onClick={() => removePriceRow(index)} className="text-red-500 hover:text-red-400 pb-1">×</button>
-                                    )}
-                                </motion.div>
+                                </div>
                             ))}
                         </div>
                     </div>

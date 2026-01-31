@@ -137,6 +137,7 @@ model User {
   companyName        String?
   gstin              String? // Mandatory for invoicing
   category           String? // For vendors
+  customCategory     String? // Custom category when "Other" is selected
   role               UserRole  @default(CUSTOMER)
   isActive           Boolean   @default(true)
   credits            Int       @default(0)
@@ -354,7 +355,7 @@ model Quotation {
   // Relations
   customer User            @relation(fields: [customerId], references: [id], onDelete: Cascade)
   lines    QuotationLine[]
-  order    RentalOrder?
+  orders   RentalOrder[]
   invoice  Invoice?
 
   createdAt DateTime @default(now())
@@ -391,7 +392,7 @@ model RentalOrder {
   id               String         @id @default(cuid())
   customerId       String
   vendorId         String?        // Which vendor this order belongs to (optional for migration)
-  quotationId      String?        @unique
+  quotationId      String?
   orderNumber      String         @unique
   status           OrderStatus    @default(CONFIRMED)
   subtotal         Decimal

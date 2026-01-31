@@ -65,9 +65,9 @@ export default function VendorOrders() {
                                     </td>
                                     <td className="p-4">
                                         <span className={`px-2 py-1 rounded text-xs font-bold ${order.status === 'CONFIRMED' ? 'bg-green-500/10 text-green-400' :
-                                                order.status === 'PICKED_UP' ? 'bg-blue-500/10 text-blue-400' :
-                                                    order.status === 'RETURNED' ? 'bg-gray-500/10 text-gray-400' :
-                                                        'bg-yellow-500/10 text-yellow-400'
+                                            order.status === 'PICKED_UP' ? 'bg-blue-500/10 text-blue-400' :
+                                                order.status === 'RETURNED' ? 'bg-gray-500/10 text-gray-400' :
+                                                    'bg-yellow-500/10 text-yellow-400'
                                             }`}>
                                             {order.status}
                                         </span>
@@ -90,7 +90,10 @@ export default function VendorOrders() {
                                                     Receive Return
                                                 </button>
                                             )}
-                                            <button className="px-3 py-1 bg-gray-800 hover:bg-gray-700 rounded text-xs font-bold text-gray-300">
+                                            <button
+                                                onClick={() => window.open(`/api/orders/${order.id}/invoice`, '_blank')}
+                                                className="px-3 py-1 bg-gray-800 hover:bg-gray-700 rounded text-xs font-bold text-gray-300 transition-colors"
+                                            >
                                                 Invoice
                                             </button>
                                         </div>
