@@ -1,12 +1,20 @@
-"use client";
-import { useState } from 'react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+'use client';
 
-export default function LoginPage() {
-    const [formData, setFormData] = useState({ email: '', password: '' });
-    const [error, setError] = useState('');
+import { useState } from 'react';
+import { motion } from 'framer-motion';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { useAuth } from '@/context/AuthContext';
+
+export default function Login() {
     const router = useRouter();
+    const { login: authLogin } = useAuth();
+    const [formData, setFormData] = useState({
+        email: '',
+        password: '',
+    });
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
 
     const handleChange = (e) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -15,78 +23,103 @@ export default function LoginPage() {
     const handleSubmit = async (e) => {
         e.preventDefault();
         setError('');
+        setLoading(true);
 
         try {
             const res = await fetch('/api/auth/login', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                },
                 body: JSON.stringify(formData),
             });
 
-            if (res.ok) {
-                const data = await res.json();
-                localStorage.setItem('token', data.token);
-                router.push('/');
-            } else {
-                const data = await res.json();
-                setError(data.message || 'Login failed');
+            const data = await res.json();
+
+            if (!res.ok) {
+                throw new Error(data.error || 'Login failed');
             }
+
+            // Successful login
+            // router.push('/dashboard'); // Handled by context
+            authLogin(data.user);
         } catch (err) {
-            setError('An error occurred. Please try again.');
+            setError(err.message);
+        } finally {
+            setLoading(false);
         }
     };
 
     return (
-        <div className="flex items-center justify-center min-h-screen bg-gray-900 text-white">
-            <div className="w-full max-w-md p-8 space-y-6 bg-gray-800 rounded-xl shadow-2xl border border-gray-700">
-                <h1 className="text-3xl font-bold text-center text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-600">
-                    Welcome Back
-                </h1>
-                <p className="text-center text-gray-400">Sign in to your account</p>
+        <div className="min-h-screen bg-black text-white flex items-center justify-center p-4 overflow-hidden relative">
+            {/* Background Effect */}
+            <div className="absolute top-[-20%] right-[-10%] w-[50%] h-[50%] bg-purple-900/30 rounded-full blur-[120px]" />
+            <div className="absolute bottom-[-20%] left-[-10%] w-[50%] h-[50%] bg-indigo-900/30 rounded-full blur-[120px]" />
 
-                {error && <div className="p-3 text-sm text-red-500 bg-red-900/20 rounded-md text-center">{error}</div>}
+            <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="max-w-md w-full bg-gray-900/40 backdrop-blur-xl border border-gray-800 rounded-2xl p-8 shadow-2xl relative z-10"
+            >
+                <div className="text-center mb-8">
+                    <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-pink-600 mb-2">
+                        Welcome Back
+                    </h1>
+                    <p className="text-gray-400">Sign in to your account</p>
+                </div>
 
-                <form onSubmit={handleSubmit} className="space-y-4">
+                <form onSubmit={handleSubmit} className="space-y-6">
                     <div>
-                        <label className="block text-sm font-medium text-gray-300">Email</label>
+                        <label className="block text-sm font-medium text-gray-400 mb-1.5 ml-1">Email Address</label>
                         <input
-                            type="email"
                             name="email"
+                            type="email"
                             value={formData.email}
                             onChange={handleChange}
-                            required
-                            className="w-full mt-1 px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 focus:outline-none text-white placeholder-gray-500 transition-all"
                             placeholder="you@example.com"
+                            className="w-full bg-gray-800/50 border border-gray-700 text-white rounded-xl px-4 py-3 focus:outline-none focus:border-purple-500 transition-colors placeholder-gray-600"
                         />
                     </div>
+
                     <div>
-                        <label className="block text-sm font-medium text-gray-300">Password</label>
+                        <div className="flex justify-between items-center mb-1.5 ml-1">
+                            <label className="block text-sm font-medium text-gray-400">Password</label>
+                            <Link href="/forgot-password" className="text-xs text-purple-400 hover:text-purple-300 font-medium">
+                                Forgot Password?
+                            </Link>
+                        </div>
                         <input
-                            type="password"
                             name="password"
+                            type="password"
                             value={formData.password}
                             onChange={handleChange}
-                            required
-                            className="w-full mt-1 px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 focus:outline-none text-white placeholder-gray-500 transition-all"
                             placeholder="••••••••"
+                            className="w-full bg-gray-800/50 border border-gray-700 text-white rounded-xl px-4 py-3 focus:outline-none focus:border-purple-500 transition-colors placeholder-gray-600"
                         />
                     </div>
+
+                    {error && (
+                        <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm text-center">
+                            {error}
+                        </div>
+                    )}
 
                     <button
                         type="submit"
-                        className="w-full py-3 font-semibold text-white bg-gradient-to-r from-purple-500 to-pink-600 rounded-lg hover:from-purple-600 hover:to-pink-700 focus:ring-4 focus:ring-purple-500/30 transition-all transform hover:scale-[1.02]"
+                        disabled={loading}
+                        className="w-full bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold py-3.5 rounded-xl hover:shadow-lg hover:shadow-purple-500/25 transition-all transform hover:-translate-y-0.5 disabled:opacity-50"
                     >
-                        Sign In
+                        {loading ? 'Signing In...' : 'Sign In'}
                     </button>
                 </form>
 
-                <p className="text-sm text-center text-gray-400">
+                <div className="mt-8 pt-6 border-t border-gray-800 text-center text-sm text-gray-400">
                     Don't have an account?{' '}
-                    <Link href="/signup" className="text-purple-400 hover:text-purple-300 transition-colors">
-                        Sign up
+                    <Link href="/signup" className="text-purple-400 hover:text-purple-300 font-bold">
+                        Sign Up
                     </Link>
-                </p>
-            </div>
+                </div>
+            </motion.div>
         </div>
     );
 }
