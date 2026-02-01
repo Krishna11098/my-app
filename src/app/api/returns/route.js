@@ -9,7 +9,7 @@ export async function POST(req) {
 
         const order = await prisma.rentalOrder.findUnique({
             where: { id: orderId },
-            include: { 
+            include: {
                 lines: true,
                 return: true,
                 customer: true
@@ -32,9 +32,7 @@ export async function POST(req) {
 
         if (today > rentalEnd) {
             lateDays = Math.ceil((today - rentalEnd) / (1000 * 60 * 60 * 24));
-            // Late fee: 10% of daily rate per late day
-            const dailyRate = Number(order.subtotal) / Math.ceil((rentalEnd - new Date(order.rentalStart)) / (1000 * 60 * 60 * 24));
-            lateFee = lateDays * dailyRate * 0.1;
+            lateFee = lateDays * 10;
         }
 
         // Calculate damage fee
@@ -133,8 +131,8 @@ export async function POST(req) {
             return returnDoc;
         });
 
-        return NextResponse.json({ 
-            success: true, 
+        return NextResponse.json({
+            success: true,
             returnId: result.id,
             lateDays,
             lateFee,

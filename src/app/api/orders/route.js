@@ -25,16 +25,24 @@ export async function GET(req) {
 
         // Map to flat list of orders/quotations
         const orders = quotations.flatMap(q => {
+            const quotationItems = (q.lines || []).map(l => ({
+                name: l.product?.name || 'Item',
+                qty: l.quantity || 1
+            }));
+
             if (q.orders && q.orders.length > 0) {
                 return q.orders.map(o => ({
                     id: o.id,
                     isOrder: true,
                     referenceNumber: o.orderNumber,
                     status: o.status,
-                    totalAmount: o.totalAmount,
+                    totalAmount: Number(o.totalAmount || 0),
                     rentalStart: o.rentalStart,
                     rentalEnd: o.rentalEnd,
-                    items: o.lines.map(l => ({ name: l.product?.name || 'Item', qty: l.quantity })),
+                    items: (o.lines || []).map(l => ({
+                        name: l.product?.name || 'Item',
+                        qty: l.quantity || 1
+                    })),
                     rawStatus: q.status
                 }));
             }
@@ -43,10 +51,10 @@ export async function GET(req) {
                 isOrder: false,
                 referenceNumber: q.quotationNumber,
                 status: q.status,
-                totalAmount: q.totalAmount,
+                totalAmount: Number(q.totalAmount || 0),
                 rentalStart: q.rentalStart,
                 rentalEnd: q.rentalEnd,
-                items: q.lines.map(l => ({ name: l.product?.name || 'Item', qty: l.quantity })),
+                items: quotationItems,
                 rawStatus: q.status
             }];
         });

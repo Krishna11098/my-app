@@ -4,11 +4,14 @@ import { motion } from 'framer-motion';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Package, TrendingUp, Clock, FileText, Plus, ArrowRight, DollarSign, Activity } from 'lucide-react';
+import OrderDetailsModal from '@/components/vendor/OrderDetailsModal';
 
 export default function VendorDashboard() {
     const [stats, setStats] = useState({ revenue: 0, activeRents: 0, totalProducts: 0, pendingOrders: 0 });
     const [recentOrders, setRecentOrders] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [selectedOrder, setSelectedOrder] = useState(null);
+    const [isModalOpen, setIsModalOpen] = useState(false);
 
     useEffect(() => {
         Promise.all([
@@ -22,6 +25,11 @@ export default function VendorDashboard() {
             setLoading(false);
         });
     }, []);
+
+    const openOrderDetails = (order) => {
+        setSelectedOrder(order);
+        setIsModalOpen(true);
+    };
 
     const statCards = [
         { label: 'Total Revenue', value: `₹${Number(stats.revenue || 0).toLocaleString()}`, icon: DollarSign, color: 'bg-green-500' },
@@ -85,7 +93,8 @@ export default function VendorDashboard() {
                                     <motion.div
                                         key={order.id}
                                         whileHover={{ x: 8 }}
-                                        className="flex justify-between items-center p-6 bg-gray-900 border-4 border-black shadow-[4px_4px_0px_0px_rgba(124,58,237,1)] group"
+                                        onClick={() => openOrderDetails(order)}
+                                        className="flex justify-between items-center p-6 bg-gray-900 border-4 border-black shadow-[4px_4px_0px_0px_rgba(124,58,237,1)] group cursor-pointer"
                                     >
                                         <div className="flex items-center gap-6">
                                             <div className="w-16 h-16 bg-white border-4 border-black flex items-center justify-center text-black font-black text-xl">
@@ -101,9 +110,9 @@ export default function VendorDashboard() {
                                             </div>
                                         </div>
                                         <div className={`px-4 py-2 border-4 border-black font-black uppercase text-xs tracking-widest shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] ${order.status === 'CONFIRMED' ? 'bg-green-500 text-black' :
-                                                order.status === 'PICKED_UP' ? 'bg-blue-500 text-black' :
-                                                    order.status === 'RETURNED' ? 'bg-purple-500 text-white' :
-                                                        'bg-yellow-500 text-black'
+                                            order.status === 'PICKED_UP' ? 'bg-blue-500 text-black' :
+                                                order.status === 'RETURNED' ? 'bg-purple-500 text-white' :
+                                                    'bg-yellow-500 text-black'
                                             }`}>
                                             {order.status}
                                         </div>
@@ -152,6 +161,12 @@ export default function VendorDashboard() {
                     </div>
                 </div>
             </div>
+
+            <OrderDetailsModal
+                order={selectedOrder}
+                isOpen={isModalOpen}
+                onClose={() => setIsModalOpen(false)}
+            />
         </div>
     );
 }

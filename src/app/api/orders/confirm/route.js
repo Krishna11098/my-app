@@ -31,7 +31,7 @@ export async function POST(req) {
                         }
                     }
                 },
-                order: true,
+                orders: true,
                 customer: true
             }
         });
@@ -40,9 +40,9 @@ export async function POST(req) {
             return NextResponse.json({ error: 'Quotation not found' }, { status: 404 });
         }
 
-        if (quotation.status === 'CONFIRMED' || quotation.order) {
-            if (quotation.order) {
-                return NextResponse.json({ success: true, orderId: quotation.order.id, message: 'Order was already confirmed' });
+        if (quotation.status === 'CONFIRMED' || (quotation.orders && quotation.orders.length > 0)) {
+            if (quotation.orders && quotation.orders.length > 0) {
+                return NextResponse.json({ success: true, orderId: quotation.orders[0].id, message: 'Order was already confirmed' });
             }
             return NextResponse.json({ error: 'Order already confirmed' }, { status: 400 });
         }

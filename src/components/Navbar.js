@@ -10,8 +10,12 @@ export default function Navbar() {
     const { user, logout } = useAuth();
     const pathname = usePathname();
 
-    // Don't show Navbar on homepage - it has its own navigation
-    if (pathname === '/') {
+    // Aggressive suppression for homepage and administrative clusters
+    const isAdminRoute = pathname?.startsWith('/admin') ||
+        (typeof window !== 'undefined' && window.location.pathname.startsWith('/admin'));
+    const isHome = pathname === '/';
+
+    if (isHome || isAdminRoute) {
         return null;
     }
 
@@ -98,8 +102,8 @@ export default function Navbar() {
                                     <motion.button
                                         whileHover={{ y: -3 }}
                                         className={`px-4 py-2 font-bold uppercase text-xs tracking-wide border-2 transition-all flex items-center gap-2 ${pathname === link.path
-                                                ? 'bg-purple-500 text-black border-purple-500 shadow-[3px_3px_0px_0px_rgba(168,85,247,1)]'
-                                                : 'text-gray-400 border-gray-800 hover:text-white hover:border-purple-500'
+                                            ? 'bg-purple-500 text-black border-purple-500 shadow-[3px_3px_0px_0px_rgba(168,85,247,1)]'
+                                            : 'text-gray-400 border-gray-800 hover:text-white hover:border-purple-500'
                                             }`}
                                     >
                                         <link.icon className="w-4 h-4" strokeWidth={3} />
@@ -173,8 +177,8 @@ export default function Navbar() {
                                 <motion.button
                                     whileHover={{ y: -3 }}
                                     className={`px-4 py-2 font-bold uppercase text-xs tracking-wide border-2 transition-all flex items-center gap-2 ${pathname === link.path
-                                            ? 'bg-purple-500 text-black border-purple-500 shadow-[3px_3px_0px_0px_rgba(168,85,247,1)]'
-                                            : 'text-gray-400 border-gray-800 hover:text-white hover:border-purple-500'
+                                        ? 'bg-purple-500 text-black border-purple-500 shadow-[3px_3px_0px_0px_rgba(168,85,247,1)]'
+                                        : 'text-gray-400 border-gray-800 hover:text-white hover:border-purple-500'
                                         }`}
                                 >
                                     <link.icon className="w-4 h-4" strokeWidth={3} />

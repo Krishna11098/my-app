@@ -810,3 +810,9 @@ model CouponUsage {
   @@unique([couponId, userId, orderId])
   @@index([userId])
 }
+
+generator erd {
+  provider = "prisma-erd-generator"
+  output   = "./ERD.svg"
+  theme    = "forest"
+}

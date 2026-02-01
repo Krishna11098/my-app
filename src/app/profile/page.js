@@ -15,7 +15,9 @@ export default function ProfilePage() {
         name: '',
         phone: '',
         bio: '',
-        profilePhoto: ''
+        profilePhoto: '',
+        companyName: '',
+        gstin: ''
     });
 
     // Password change state
@@ -43,7 +45,9 @@ export default function ProfilePage() {
                     name: data.name || '',
                     phone: data.phone || '',
                     bio: data.bio || '',
-                    profilePhoto: data.profilePhoto || ''
+                    profilePhoto: data.profilePhoto || '',
+                    companyName: data.companyName || '',
+                    gstin: data.gstin || ''
                 });
             }
         } catch (err) {
@@ -169,9 +173,9 @@ export default function ProfilePage() {
                             {/* Profile Photo */}
                             <div className="relative inline-block mb-4">
                                 {formData.profilePhoto || profile?.profilePhoto ? (
-                                    <img 
-                                        src={formData.profilePhoto || profile?.profilePhoto} 
-                                        alt="Profile" 
+                                    <img
+                                        src={formData.profilePhoto || profile?.profilePhoto}
+                                        alt="Profile"
                                         className="w-32 h-32 rounded-full object-cover border-4 border-purple-500"
                                     />
                                 ) : (
@@ -207,7 +211,7 @@ export default function ProfilePage() {
                                         <code className="text-lg font-mono font-bold text-green-400 bg-green-900/30 px-3 py-1 rounded">
                                             {profile.ownCouponCode}
                                         </code>
-                                        <button 
+                                        <button
                                             onClick={copyCouponCode}
                                             className="p-2 hover:bg-gray-700 rounded-lg transition-all"
                                             title="Copy code"
@@ -247,7 +251,7 @@ export default function ProfilePage() {
                             <div className="flex items-center justify-between mb-6">
                                 <h3 className="text-xl font-bold">Profile Details</h3>
                                 {!editing ? (
-                                    <button 
+                                    <button
                                         onClick={() => setEditing(true)}
                                         className="px-4 py-2 bg-purple-600 hover:bg-purple-500 rounded-lg text-sm font-medium transition-all"
                                     >
@@ -255,13 +259,13 @@ export default function ProfilePage() {
                                     </button>
                                 ) : (
                                     <div className="flex gap-2">
-                                        <button 
+                                        <button
                                             onClick={() => setEditing(false)}
                                             className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm font-medium transition-all"
                                         >
                                             Cancel
                                         </button>
-                                        <button 
+                                        <button
                                             onClick={handleSave}
                                             disabled={saving}
                                             className="px-4 py-2 bg-green-600 hover:bg-green-500 rounded-lg text-sm font-medium transition-all disabled:opacity-50"
@@ -277,7 +281,7 @@ export default function ProfilePage() {
                                 <div>
                                     <label className="block text-sm text-gray-400 mb-2">Full Name</label>
                                     {editing ? (
-                                        <input 
+                                        <input
                                             type="text"
                                             value={formData.name}
                                             onChange={e => setFormData({ ...formData, name: e.target.value })}
@@ -298,7 +302,7 @@ export default function ProfilePage() {
                                 <div>
                                     <label className="block text-sm text-gray-400 mb-2">Phone Number</label>
                                     {editing ? (
-                                        <input 
+                                        <input
                                             type="tel"
                                             value={formData.phone}
                                             onChange={e => setFormData({ ...formData, phone: e.target.value })}
@@ -314,7 +318,7 @@ export default function ProfilePage() {
                                 <div>
                                     <label className="block text-sm text-gray-400 mb-2">Bio</label>
                                     {editing ? (
-                                        <textarea 
+                                        <textarea
                                             value={formData.bio}
                                             onChange={e => setFormData({ ...formData, bio: e.target.value })}
                                             placeholder="Tell us about yourself..."
@@ -324,6 +328,36 @@ export default function ProfilePage() {
                                     ) : (
                                         <p className="text-gray-300">{profile?.bio || <span className="text-gray-500">No bio added</span>}</p>
                                     )}
+                                </div>
+
+                                {/* Business Info */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-6 border-t border-gray-800">
+                                    <div>
+                                        <label className="block text-sm text-gray-400 mb-2">Company Name</label>
+                                        {editing ? (
+                                            <input
+                                                type="text"
+                                                value={formData.companyName}
+                                                onChange={e => setFormData({ ...formData, companyName: e.target.value })}
+                                                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 focus:outline-none focus:border-purple-500"
+                                            />
+                                        ) : (
+                                            <p className="text-lg">{profile?.companyName || <span className="text-gray-500">Not set</span>}</p>
+                                        )}
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm text-gray-400 mb-2">GSTIN</label>
+                                        {editing ? (
+                                            <input
+                                                type="text"
+                                                value={formData.gstin}
+                                                onChange={e => setFormData({ ...formData, gstin: e.target.value })}
+                                                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 focus:outline-none focus:border-purple-500"
+                                            />
+                                        ) : (
+                                            <p className="text-lg uppercase">{profile?.gstin || <span className="text-gray-500">Not set</span>}</p>
+                                        )}
+                                    </div>
                                 </div>
 
                                 {/* Member Since */}
@@ -338,7 +372,7 @@ export default function ProfilePage() {
                         <div className="bg-gray-900/50 border border-gray-800 rounded-2xl p-6 mt-6">
                             <div className="flex items-center justify-between mb-4">
                                 <h3 className="text-xl font-bold">Security</h3>
-                                <button 
+                                <button
                                     onClick={() => setShowPasswordChange(!showPasswordChange)}
                                     className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm font-medium transition-all"
                                 >
@@ -360,7 +394,7 @@ export default function ProfilePage() {
                                     )}
                                     <div>
                                         <label className="block text-sm text-gray-400 mb-2">Current Password</label>
-                                        <input 
+                                        <input
                                             type="password"
                                             value={passwordData.currentPassword}
                                             onChange={e => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
@@ -370,7 +404,7 @@ export default function ProfilePage() {
                                     </div>
                                     <div>
                                         <label className="block text-sm text-gray-400 mb-2">New Password</label>
-                                        <input 
+                                        <input
                                             type="password"
                                             value={passwordData.newPassword}
                                             onChange={e => setPasswordData({ ...passwordData, newPassword: e.target.value })}
@@ -381,7 +415,7 @@ export default function ProfilePage() {
                                     </div>
                                     <div>
                                         <label className="block text-sm text-gray-400 mb-2">Confirm New Password</label>
-                                        <input 
+                                        <input
                                             type="password"
                                             value={passwordData.confirmPassword}
                                             onChange={e => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
@@ -389,7 +423,7 @@ export default function ProfilePage() {
                                             className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 focus:outline-none focus:border-purple-500"
                                         />
                                     </div>
-                                    <button 
+                                    <button
                                         type="submit"
                                         disabled={changingPassword}
                                         className="w-full px-4 py-3 bg-purple-600 hover:bg-purple-500 rounded-lg font-medium transition-all disabled:opacity-50"

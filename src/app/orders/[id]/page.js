@@ -86,7 +86,10 @@ export default function OrderDetailsPage() {
         }
     };
 
-    const canReturn = ['CONFIRMED', 'PICKED_UP', 'OVERDUE'].includes(order.status) && !order.return && returnItems.length > 0;
+    // Return logic: Only allow if status is PICKED_UP or OVERDUE (must have the item first)
+    // and ideally within a reasonable window of the end date (e.g., 24 hours before) or if already overdue.
+    const isWithinReturnWindow = new Date() > new Date(new Date(order.rentalEnd).getTime() - 24 * 60 * 60 * 1000); // 24 hours before end
+    const canReturn = ['PICKED_UP', 'OVERDUE'].includes(order.status) && (isWithinReturnWindow || order.status === 'OVERDUE') && !order.return && returnItems.length > 0;
     const isOverdue = new Date() > new Date(order.rentalEnd) && !order.return;
 
     return (
@@ -110,7 +113,7 @@ export default function OrderDetailsPage() {
                         <div>
                             <p className="font-bold text-red-400">Rental Period Overdue!</p>
                             <p className="text-sm text-red-300/70">
-                                Your rental was due on {new Date(order.rentalEnd).toLocaleDateString()}. 
+                                Your rental was due on {new Date(order.rentalEnd).toLocaleDateString()}.
                                 Please return the items as soon as possible to avoid additional late fees.
                             </p>
                         </div>
@@ -149,7 +152,7 @@ export default function OrderDetailsPage() {
                                     const lineStart = line.rentalStart || order.rentalStart;
                                     const lineEnd = line.rentalEnd || order.rentalEnd;
                                     const lineDays = Math.ceil((new Date(lineEnd) - new Date(lineStart)) / (1000 * 60 * 60 * 24));
-                                    
+
                                     return (
                                         <div key={line.id} className="bg-black/40 p-4 rounded-xl">
                                             <div className="flex justify-between items-center">
@@ -206,7 +209,7 @@ export default function OrderDetailsPage() {
                                     <div className="space-y-2 text-sm">
                                         <p><span className="text-gray-400">Pickup #:</span> {order.pickup.pickupNumber}</p>
                                         <p><span className="text-gray-400">Date:</span> {new Date(order.pickup.pickupDate).toLocaleDateString()}</p>
-                                        <p><span className="text-gray-400">Status:</span> 
+                                        <p><span className="text-gray-400">Status:</span>
                                             <span className={`ml-2 px-2 py-0.5 rounded text-xs ${order.pickup.status === 'COMPLETED' ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'}`}>
                                                 {order.pickup.status}
                                             </span>
@@ -224,7 +227,7 @@ export default function OrderDetailsPage() {
                                     <div className="space-y-2 text-sm">
                                         <p><span className="text-gray-400">Return #:</span> {order.return.returnNumber}</p>
                                         <p><span className="text-gray-400">Date:</span> {new Date(order.return.returnDate).toLocaleDateString()}</p>
-                                        <p><span className="text-gray-400">Status:</span> 
+                                        <p><span className="text-gray-400">Status:</span>
                                             <span className={`ml-2 px-2 py-0.5 rounded text-xs ${order.return.status === 'COMPLETED' ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'}`}>
                                                 {order.return.status}
                                             </span>
@@ -241,7 +244,7 @@ export default function OrderDetailsPage() {
                         {(order.pickupAddress || order.returnAddress) && (
                             <div className="bg-gray-900/50 border border-gray-800 rounded-2xl p-6">
                                 <h2 className="text-xl font-bold mb-4">📍 Delivery Information</h2>
-                                
+
                                 {/* Delivery Method */}
                                 <div className="mb-6 p-4 bg-black/40 rounded-xl">
                                     <p className="text-sm text-gray-400 mb-2">Delivery Method</p>
@@ -286,7 +289,7 @@ export default function OrderDetailsPage() {
                         {/* Payment Summary */}
                         <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 sticky top-24">
                             <h2 className="text-xl font-bold mb-6">Payment Summary</h2>
-                            
+
                             <div className="space-y-3 mb-6">
                                 <div className="flex justify-between text-gray-400">
                                     <span>Subtotal</span>
@@ -333,7 +336,7 @@ export default function OrderDetailsPage() {
                                 >
                                     📄 View Invoice
                                 </button>
-                                
+
                                 {order.invoice?.status !== 'PAID' && (order.totalAmount - order.amountPaid) > 0 && (
                                     <button
                                         onClick={() => router.push(`/orders/${id}/pay`)}
@@ -359,11 +362,10 @@ export default function OrderDetailsPage() {
                                     <p className="text-sm text-gray-400 mb-2">Invoice Status</p>
                                     <div className="flex items-center justify-between">
                                         <span className="font-mono text-sm">{order.invoice.invoiceNumber}</span>
-                                        <span className={`px-2 py-1 rounded text-xs font-bold ${
-                                            order.invoice.status === 'PAID' ? 'bg-green-500/20 text-green-400' :
-                                            order.invoice.status === 'PARTIAL' ? 'bg-yellow-500/20 text-yellow-400' :
-                                            'bg-gray-500/20 text-gray-400'
-                                        }`}>
+                                        <span className={`px-2 py-1 rounded text-xs font-bold ${order.invoice.status === 'PAID' ? 'bg-green-500/20 text-green-400' :
+                                                order.invoice.status === 'PARTIAL' ? 'bg-yellow-500/20 text-yellow-400' :
+                                                    'bg-gray-500/20 text-gray-400'
+                                            }`}>
                                             {order.invoice.status}
                                         </span>
                                     </div>
@@ -397,11 +399,10 @@ export default function OrderDetailsPage() {
                                                 newItems[index].condition = 'GOOD';
                                                 setReturnItems(newItems);
                                             }}
-                                            className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all ${
-                                                item.condition === 'GOOD' 
-                                                    ? 'bg-green-600 text-white' 
+                                            className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all ${item.condition === 'GOOD'
+                                                    ? 'bg-green-600 text-white'
                                                     : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
-                                            }`}
+                                                }`}
                                         >
                                             ✓ Good Condition
                                         </button>
@@ -411,11 +412,10 @@ export default function OrderDetailsPage() {
                                                 newItems[index].condition = 'DAMAGED';
                                                 setReturnItems(newItems);
                                             }}
-                                            className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all ${
-                                                item.condition === 'DAMAGED' 
-                                                    ? 'bg-red-600 text-white' 
+                                            className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all ${item.condition === 'DAMAGED'
+                                                    ? 'bg-red-600 text-white'
                                                     : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
-                                            }`}
+                                                }`}
                                         >
                                             ⚠ Damaged
                                         </button>
@@ -427,7 +427,7 @@ export default function OrderDetailsPage() {
                         {isOverdue && (
                             <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 mb-6">
                                 <p className="text-red-400 text-sm">
-                                    ⚠️ <strong>Late Return:</strong> Your rental ended on {new Date(order.rentalEnd).toLocaleDateString()}. 
+                                    ⚠️ <strong>Late Return:</strong> Your rental ended on {new Date(order.rentalEnd).toLocaleDateString()}.
                                     Late fees will be calculated at 10% of the rental amount per day overdue.
                                 </p>
                             </div>

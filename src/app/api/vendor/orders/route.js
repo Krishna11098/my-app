@@ -8,7 +8,7 @@ async function getVendorFromToken() {
     const cookieStore = await cookies();
     const token = cookieStore.get('token')?.value;
     if (!token) return null;
-    
+
     try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         const user = await prisma.user.findUnique({
@@ -35,7 +35,7 @@ export async function GET(req) {
             where: {
                 vendorId: vendor.id  // Only vendor's orders
             },
-            include: { 
+            include: {
                 customer: {
                     select: { id: true, name: true, email: true, phone: true }
                 },
@@ -83,6 +83,8 @@ export async function PUT(req) {
             data: { status }
         });
 
+        let lateInfo = null;
+
         // Handle Status Transitions
         if (status === 'RETURNED') {
             const reservations = await prisma.reservation.findMany({ where: { orderId: id } });
@@ -97,6 +99,20 @@ export async function PUT(req) {
                 }
             }
 
+            // Calculate Late Days and Fees
+            const rentalEnd = new Date(existingOrder.rentalEnd);
+            let lateDays = 0;
+            let lateFee = 0;
+
+            if (now > rentalEnd) {
+                // Use higher resolution for comparison then ceil for days
+                const diffTime = now.getTime() - rentalEnd.getTime();
+                lateDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                lateFee = lateDays * 10; // User requested Y * 10
+            }
+
+            lateInfo = { lateDays, lateFee };
+
             const existingReturn = await prisma.return.findUnique({ where: { orderId: id } });
             if (!existingReturn) {
                 const count = await prisma.return.count();
@@ -105,7 +121,20 @@ export async function PUT(req) {
                         orderId: id,
                         returnNumber: `RET-${new Date().getFullYear()}-${(count + 1).toString().padStart(4, '0')}`,
                         returnDate: now,
+                        lateDays,
+                        lateFee,
                         status: 'COMPLETED',
+                    }
+                });
+            } else {
+                // Update existing return if it was pending
+                await prisma.return.update({
+                    where: { id: existingReturn.id },
+                    data: {
+                        returnDate: now,
+                        lateDays,
+                        lateFee,
+                        status: 'COMPLETED'
                     }
                 });
             }
@@ -126,7 +155,7 @@ export async function PUT(req) {
             }
         }
 
-        return NextResponse.json(updatedOrder);
+        return NextResponse.json({ ...updatedOrder, lateInfo });
     } catch (error) {
         console.error("Order Update Error:", error);
         return NextResponse.json({ error: 'Error updating order' }, { status: 500 });

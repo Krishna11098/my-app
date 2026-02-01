@@ -143,7 +143,10 @@ export async function GET(req) {
             trendsMap.set(key, current + Number(order.totalAmount));
         });
 
-        const trends = Array.from(trendsMap.values());
+        const trends = Array.from(trendsMap.entries()).map(([label, value]) => ({
+            label,
+            value
+        }));
 
         // 7. Top Rented Products (Filtered by Vendor)
         const topProductsAgg = await prisma.orderLine.groupBy({
