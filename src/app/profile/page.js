@@ -58,6 +58,17 @@ export default function ProfilePage() {
     };
 
     const handleSave = async () => {
+        if (formData.phone) {
+            if (formData.phone.length !== 13) {
+                alert('Phone number must be exactly 13 characters long');
+                return;
+            }
+            if (/[a-zA-Z]/.test(formData.phone)) {
+                alert('Phone number cannot contain alphabets');
+                return;
+            }
+        }
+
         setSaving(true);
         try {
             const res = await fetch('/api/auth/profile', {

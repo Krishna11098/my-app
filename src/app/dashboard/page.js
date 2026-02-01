@@ -11,13 +11,20 @@ export default function CustomerDashboard() {
     const [products, setProducts] = useState([]);
     const [loading, setLoading] = useState(true);
     const [category, setCategory] = useState('All');
+    const [searchTerm, setSearchTerm] = useState('');
+    const [priceRange, setPriceRange] = useState({ min: '', max: '' });
     const [buyMode, setBuyMode] = useState({});
     const [quantities, setQuantities] = useState({});
 
     const fetchProducts = () => {
         setLoading(true);
-        const query = category !== 'All' ? `?category=${category}` : '';
-        fetch(`/api/products${query}`)
+        const params = new URLSearchParams();
+        if (category !== 'All') params.append('category', category);
+        if (searchTerm) params.append('search', searchTerm);
+        if (priceRange.min) params.append('minPrice', priceRange.min);
+        if (priceRange.max) params.append('maxPrice', priceRange.max);
+
+        fetch(`/api/products?${params.toString()}`)
             .then((res) => res.json())
             .then((data) => {
                 if (Array.isArray(data)) setProducts(data);
@@ -30,8 +37,11 @@ export default function CustomerDashboard() {
     };
 
     useEffect(() => {
-        fetchProducts();
-    }, [category]);
+        const timer = setTimeout(() => {
+            fetchProducts();
+        }, 500);
+        return () => clearTimeout(timer);
+    }, [category, searchTerm, priceRange]);
 
     const handleBuyNow = (productId) => {
         setBuyMode({ ...buyMode, [productId]: true });
@@ -59,6 +69,8 @@ export default function CustomerDashboard() {
         } catch (e) { console.error(e); }
     };
 
+    const filteredProducts = products;
+
     return (
         <div className="min-h-screen bg-black text-white p-6 md:p-10">
             <div className="max-w-7xl mx-auto">
@@ -80,7 +92,7 @@ export default function CustomerDashboard() {
                     </div>
 
                     <div className="flex flex-wrap gap-3 mt-6">
-                        {['All', 'Electronics', 'Furniture', 'Tools', 'Photography', 'Vehicles'].map(cat => (
+                        {['All', 'Electronics', 'Furniture', 'Tools', 'Photography', 'Vehicles' , 'General'].map(cat => (
                             <motion.button
                                 key={cat}
                                 onClick={() => setCategory(cat)}
@@ -94,7 +106,56 @@ export default function CustomerDashboard() {
                             </motion.button>
                         ))}
                     </div>
+
+                    {/* Search and Price Filter */}
+                    <div className="flex flex-col md:flex-row gap-4 mt-6 p-4 bg-gray-900/50 border-2 border-gray-800">
+                        <div className="flex-1">
+                            <label className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1 block">Search</label>
+                            <input 
+                                type="text"
+                                placeholder="Search products or categories..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                className="w-full bg-black border-2 border-gray-700 p-2 text-white placeholder-gray-600 focus:border-purple-500 outline-none font-bold text-sm"
+                            />
+                        </div>
+                        <div className="flex gap-4">
+                            <div>
+                                <label className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1 block">Min Price</label>
+                                <input 
+                                    type="number"
+                                    placeholder="0"
+                                    value={priceRange.min}
+                                    onChange={(e) => {
+                                        const val = e.target.value;
+                                        if (val === '' || parseFloat(val) >= 0) {
+                                            setPriceRange({...priceRange, min: val});
+                                        }
+                                    }}
+                                    className="w-24 bg-black border-2 border-gray-700 p-2 text-white placeholder-gray-600 focus:border-purple-500 outline-none font-bold text-sm"
+                                />
+                            </div>
+                            <div>
+                                <label className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1 block">Max Price</label>
+                                <input 
+                                    type="number"
+                                    placeholder="Any"
+                                    value={priceRange.max}
+                                    onChange={(e) => {
+                                        const val = e.target.value;
+                                        if (val === '' || parseFloat(val) >= 0) {
+                                            setPriceRange({...priceRange, max: val});
+                                        }
+                                    }}
+                                    className="w-24 bg-black border-2 border-gray-700 p-2 text-white placeholder-gray-600 focus:border-purple-500 outline-none font-bold text-sm"
+                                />
+                            </div>
+                        </div>
+                    </div>
                 </header>
+
+                
+               
 
                 {/* Products Grid */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
@@ -103,12 +164,14 @@ export default function CustomerDashboard() {
                             <div key={i} className="h-96 bg-gray-900 border-4 border-gray-800 animate-pulse" />
                         ))
                     ) : (
-                        products.map((product) => (
+                        filteredProducts.map((product) => (
                             <motion.div
                                 key={product.id}
                                 initial={{ opacity: 0, y: 20 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 whileHover={{ y: -8, x: -4 }}
+                                
+                                category={category}
                                 className="group bg-black border-4 border-gray-800 hover:border-purple-500 shadow-[6px_6px_0px_0px_rgba(75,85,99,1)] hover:shadow-[12px_12px_0px_0px_rgba(168,85,247,1)] transition-all flex flex-col"
                             >
                                 {/* Image Area - Clickable */}
@@ -128,6 +191,7 @@ export default function CustomerDashboard() {
 
                                 {/* Content Area */}
                                 <div className="p-5 flex-1 flex flex-col">
+                                    
                                     <h3 className="text-xl font-black uppercase text-white mb-2 line-clamp-1">{product.name}</h3>
                                     <p className="text-gray-500 text-sm mb-4 line-clamp-2 min-h-[40px] font-medium">{product.description || 'No description available.'}</p>
 

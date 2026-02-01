@@ -6,22 +6,30 @@ export async function GET(req) {
         const { searchParams } = new URL(req.url);
         const category = searchParams.get('category');
         const search = searchParams.get('search');
+        const minPrice = searchParams.get('minPrice');
+        const maxPrice = searchParams.get('maxPrice');
 
         // Build Filter
         let where = { isPublished: true };
 
         if (category && category !== 'All') {
-            // Assuming category is stored in attributes JSON
-            where.attributes = {
-                path: ['category'],
-                equals: category
+            where.category = {
+                equals: category,
+                mode: 'insensitive'
             };
+        }
+
+        if (minPrice || maxPrice) {
+            where.salePrice = {};
+            if (minPrice) where.salePrice.gte = parseFloat(minPrice);
+            if (maxPrice) where.salePrice.lte = parseFloat(maxPrice);
         }
 
         if (search) {
             where.OR = [
                 { name: { contains: search, mode: 'insensitive' } },
-                { description: { contains: search, mode: 'insensitive' } }
+                { description: { contains: search, mode: 'insensitive' } },
+                { category: { contains: search, mode: 'insensitive' } }
             ];
         }
 
